@@ -6232,6 +6232,7 @@ struct Index {
         .onClick(() => {
           this.showSessionPanel = false;
         })
+      Scroll() {
       Column({ space: 0 }) {
         Row({ space: 8 }) {
           Text('🔍')
@@ -6508,6 +6509,13 @@ struct Index {
       .backgroundColor(this.pal().panel)
       .borderRadius({ topLeft: 20, topRight: 20, bottomLeft: 0, bottomRight: 0 })
       .border({ width: 1, color: this.pal().border })
+      }
+      .scrollable(ScrollDirection.Vertical)
+      .scrollBar(BarState.Off)
+      .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
+      // 面板限高，内容多了自己滚，不再顶出屏幕
+      .constraintSize({ maxHeight: this.windowHeightVp > 0 ? this.windowHeightVp * 0.82 : 640 })
+      .width('100%')
     }
     .width('100%')
     .height('100%')

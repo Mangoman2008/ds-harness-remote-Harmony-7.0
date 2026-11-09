@@ -71,6 +71,15 @@
 - 四语 README（`README.md` / `.en` / `.ja` / `.zh`）同步桌宠三交互与壁纸三档；
 - PR 说明 `docs/harmony-pr-notes.md` 版本号更新到 `0.17.148`，补桌宠/壁纸小节。
 
+### 03:00 静态复验
+
+```
+tsc --noEmit harmony/tests/{secure-store,crypto}.test.ts   → exit 0（无输出）
+build-local.sh                                            → BUILD SUCCESSFUL
+hdc install -r …                                          → install bundle successfully（锁屏下也能装）
+bm dump versionName                                       → 0.17.149-lan
+```
+
 ## 待补
 
 - 推送需要主人确认（目前 30 个本地提交，远端停在 `2f3b7a4`）。

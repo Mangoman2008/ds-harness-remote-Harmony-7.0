@@ -272,12 +272,6 @@ struct Index {
   @State previewOffsetY: number = 0;
   /** 双指缩放/拖动的手势起点：不记起点就会按「累计位移」反复叠加，图片直接飘出屏幕。 */
   private previewScaleStart: number = 1;
-  /** 上一次触摸点的屏幕坐标（px）。用屏幕坐标，避开「组件被 scale 后局部坐标被缩放」的坑。 */
-  private previewTouchX: number = 0;
-  private previewTouchY: number = 0;
-  /** 本次拖动的原始像素增量累计，松手时写进 link.log 用于核对手感（px / vp / scale）。 */
-  private previewDragPxX: number = 0;
-  private previewDragPxY: number = 0;
   private previewPanStartX: number = 0;
   private previewPanStartY: number = 0;
   /** 输入坞上跟随手指/鼠标的光斑位置与强度。 */
@@ -6684,49 +6678,6 @@ struct Index {
     this.previewClampOffset();
   }
 
-  /**
-   * 单指拖动：直接吃触摸点的**屏幕坐标**增量（px），换算成 vp 后叠加。
-   *
-   * 不用 PanGesture 的 offset 是因为它给的是组件局部坐标：图片放大 S 倍后局部坐标被缩小 S 倍，
-   * 于是「手指移一格、图只移 1/S 格」，越放大越拖不动；屏幕坐标不受 scale 影响。
-   */
-  private onPreviewTouch(event: TouchEvent): void {
-    const touches: TouchObject[] = event.touches;
-    if (touches.length !== 1) {
-      return;
-    }
-    const touch: TouchObject = touches[0];
-    if (event.type === TouchType.Down) {
-      this.previewTouchX = touch.screenX;
-      this.previewTouchY = touch.screenY;
-      this.previewDragPxX = 0;
-      this.previewDragPxY = 0;
-      return;
-    }
-    if (event.type === TouchType.Move) {
-      const rawDx: number = touch.screenX - this.previewTouchX;
-      const rawDy: number = touch.screenY - this.previewTouchY;
-      this.previewTouchX = touch.screenX;
-      this.previewTouchY = touch.screenY;
-      this.previewDragPxX = this.previewDragPxX + rawDx;
-      this.previewDragPxY = this.previewDragPxY + rawDy;
-      if (this.previewScale <= 1) {
-        return;
-      }
-      const density: number = this.pxPerVp > 0 ? this.pxPerVp : 1;
-      this.previewOffsetX = this.previewOffsetX + rawDx / density * PREVIEW_PAN_GAIN;
-      this.previewOffsetY = this.previewOffsetY + rawDy / density * PREVIEW_PAN_GAIN;
-      this.previewClampOffset();
-      return;
-    }
-    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
-      this.previewClampOffset();
-      LinkLog.write('img', 'pan dx=' + Math.round(this.previewDragPxX) + 'px dy=' + Math.round(this.previewDragPxY)
-        + 'px vp/px=' + this.pxPerVp.toFixed(2) + ' scale=' + this.previewScale.toFixed(2)
-        + ' off=' + Math.round(this.previewOffsetX) + ',' + Math.round(this.previewOffsetY)
-        + ' win=' + Math.round(this.windowWidthVp) + 'x' + Math.round(this.windowHeightVp));
-    }
-  }
 
   private onPreviewGestureEnd(): void {
     if (this.previewScale <= 1.02) {

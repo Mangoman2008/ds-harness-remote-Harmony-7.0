@@ -2,6 +2,17 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.125 / 0.17.126 — 2026-11-10
+
+设置面板交互修正：
+
+- **点一次没反应、点两次才变**：设置行的值原来直接读 `runtime.showInspector / petEnabled / themeTint /
+  compactHistory`，这些不是 `@State`，改了不会重建界面。现在镜像成 `uiShowInspector / uiPetEnabled /
+  uiThemeTint / uiCompactHistory` 并在 `syncFromRuntime()` 里同步；`pal()` 也改读 `uiThemeTint`，
+  主题色点一下立刻生效。
+- **设置面板滚动加回弹**：`edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })`。
+- **桌宠位置**：抬到输入坞上方（不再压发送按钮）；打开设置/会话设置/预览等面板时自动收起。
+
 ## 0.17.119 – 0.17.124 — 2026-11-10
 
 - **桌宠换成 dsh-go 的鲸娘精灵图**（本机自用，素材不入库）：

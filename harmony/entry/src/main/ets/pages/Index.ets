@@ -41,6 +41,11 @@ struct Index {
   private rtc: RtcBridge = new RtcBridge();
   private images: MarkdownImageCache = new MarkdownImageCache();
   @State imageVersion: number = 0;
+  /** 设置项镜像：直接读 runtime 字段不会触发重建，第一次点选会「看起来没反应」。 */
+  @State uiShowInspector: boolean = false;
+  @State uiPetEnabled: boolean = true;
+  @State uiThemeTint: number = 0;
+  @State uiCompactHistory: boolean = false;
   /** 桌宠精灵图当前帧 / 当前动画名（素材缺省时为空，界面回到 emoji）。 */
   @State petFrame: number = 0;
   @State petAnim: string = '';
@@ -554,6 +559,10 @@ struct Index {
   }
 
   private syncFromRuntime(): void {
+    this.uiShowInspector = this.runtime.showInspector;
+    this.uiPetEnabled = this.runtime.petEnabled;
+    this.uiThemeTint = this.runtime.themeTint;
+    this.uiCompactHistory = this.runtime.compactHistory;
     this.restartPetAnimation();
     this.phase = this.runtime.phase;
     this.busy = this.runtime.busy;
@@ -1307,7 +1316,7 @@ struct Index {
    * 阈值取 1180vp——再窄右栏会把消息区压到 600 以下。
    */
   private showThreePane(): boolean {
-    return this.runtime.showInspector && this.windowWidthVp >= 1180
+    return this.uiShowInspector && this.windowWidthVp >= 1180
       && this.windowHeightVp >= 560 && this.phase === PHASE_CHAT;
   }
 
@@ -1523,6 +1532,18 @@ struct Index {
     tick();
   }
 
+  /** 有面板/抽屉盖在会话上时先收起桌宠，别压在人家的按钮上。 */
+  private petOverlayAllowed(): boolean {
+    return !this.showSettings && !this.showSessionPanel && !this.previewActive
+      && !this.messageActionsOpen && !this.drawerOpenFlag() && !this.tintPickerOpen
+      && !this.diagnosticsOpen && !this.filePreviewOpen && !this.inSessionSearchOpen
+      && !this.choiceOpen && !this.promptPanelOpen;
+  }
+
+  private drawerOpenFlag(): boolean {
+    return this.drawerOpen > 0.02;
+  }
+
   /** 桌宠：有鲸娘素材就放精灵图，没有就退回 emoji。 */
   @Builder
   PetWidget() {
@@ -1565,7 +1586,8 @@ struct Index {
             : this.tr('导出失败（存储不可用）') });
         }))
     }
-    .margin({ right: 10, bottom: 92 })
+    // 别压在发送按钮上：抬到输入坞上方一档
+    .margin({ right: 14, bottom: 158 })
     .hitTestBehavior(HitTestMode.Transparent)
     .width('100%')
     .height('100%')
@@ -1624,7 +1646,7 @@ struct Index {
   }
 
   private themeTintLabel(): string {
-    const tint: number = this.runtime.themeTint;
+    const tint: number = this.uiThemeTint;
     if (tint === 1) {
       return this.tr('深海');
     }
@@ -1723,7 +1745,7 @@ struct Index {
 
   /** Active palette, re-evaluated whenever the theme or system mode flips. */
   private pal(): Palette {
-    return applyTint(this.isDarkUi ? darkPalette() : lightPalette(), this.runtime.themeTint, this.isDarkUi);
+    return applyTint(this.isDarkUi ? darkPalette() : lightPalette(), this.uiThemeTint, this.isDarkUi);
   }
 
   /** 读一下 languageMode 再取文案：让 Text 节点依赖到状态，切语言时才会重算。 */
@@ -2292,7 +2314,7 @@ struct Index {
         this.ChoiceSheetOverlay()
       }
       // 桌宠浮层：钉在右下角，避开输入坞（嵌在会话列里会被输入框盖住）
-      if (this.runtime.petEnabled && this.phase === PHASE_CHAT) {
+      if (this.uiPetEnabled && this.phase === PHASE_CHAT && this.petOverlayAllowed()) {
         this.PetWidget()
       }
       if (this.previewActive) {
@@ -2631,8 +2653,8 @@ struct Index {
                 this.openChoice('density');
               })
               this.SettingsRow(this.tr('右侧详情栏'),
-                this.runtime.showInspector ? this.tr('显示') : this.tr('隐藏'), false, () => {
-                  this.runtime.setShowInspector(!this.runtime.showInspector);
+                this.uiShowInspector ? this.tr('显示') : this.tr('隐藏'), false, () => {
+                  this.runtime.setShowInspector(!this.uiShowInspector);
                 })
               if (this.runtime.splitWidth > 0) {
                 this.SettingsRow(this.tr('会话栏宽度'),
@@ -2672,9 +2694,9 @@ struct Index {
                 });
               })
               this.SettingsRow(this.tr('桌宠'),
-                this.runtime.petEnabled ? this.tr('开 · 干活/等确认/完成 四态') : this.tr('关'),
+                this.uiPetEnabled ? this.tr('开 · 干活/等确认/完成 四态') : this.tr('关'),
                 false, () => {
-                  this.runtime.setPetEnabled(!this.runtime.petEnabled);
+                  this.runtime.setPetEnabled(!this.uiPetEnabled);
                 })
               this.SettingsRow(this.tr('主题色'), this.themeTintLabel(), false, () => {
                 AlertDialog.show({
@@ -2695,7 +2717,7 @@ struct Index {
                 });
               })
               this.SettingsRow(this.tr('精简历史'),
-                this.runtime.compactHistory ? this.tr('开 · 历史工具输出转摘要') : this.tr('关 · 传完整历史'),
+                this.uiCompactHistory ? this.tr('开 · 历史工具输出转摘要') : this.tr('关 · 传完整历史'),
                 false, () => {
                   this.runtime.setCompactHistory(!this.runtime.compactHistory).then(() => {
                     promptAction.showToast({ message: this.runtime.compactHistory
@@ -2801,6 +2823,8 @@ struct Index {
         }
         .scrollable(ScrollDirection.Vertical)
         .scrollBar(BarState.Auto)
+        // 拉到顶/到底有回弹，别像撞墙一样硬停
+        .edgeEffect(EdgeEffect.Spring, { alwaysEnabled: true })
         .constraintSize({ maxHeight: this.windowHeightVp > 0 ? this.windowHeightVp * 0.66 : 480 })
         .width('100%')
       }
@@ -7826,7 +7850,7 @@ struct Index {
               .fontSize(this.fs(14))
               .fontColor(this.pal().text)
             Blank()
-            if (this.runtime.themeTint === tint) {
+            if (this.uiThemeTint === tint) {
               Text('✓')
                 .fontSize(this.fs(14))
                 .fontColor('#22D3EE')
@@ -7834,7 +7858,7 @@ struct Index {
           }
           .width('100%')
           .padding({ left: 12, right: 12, top: 10, bottom: 10 })
-          .backgroundColor(this.runtime.themeTint === tint ? this.pal().inputBg : Color.Transparent)
+          .backgroundColor(this.uiThemeTint === tint ? this.pal().inputBg : Color.Transparent)
           .borderRadius(12)
           .onClick(() => {
             this.runtime.setThemeTint(tint);

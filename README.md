@@ -64,7 +64,9 @@ and a **native HarmonyOS client** is added on top (pure ArkTS + WebRTC inside Ar
 - **Capabilities**: account sign-in, multi-host list with aliases, end-to-end encryption (Noise IK), multi-session,
   session search / archive / pin, image and voice input, slash commands, steer & interrupt, model and reasoning effort,
   permission presets, scheduled tasks, workspace grouping, breakpoint-driven two/three-pane layout (tablet & 2-in-1),
-  Chinese/English UI, light/dark plus accent themes, desk pet
+  Chinese/English UI, light/dark plus accent themes, desk pet (whale-girl sprite pack supplied
+  by the user: tap to chat, double-tap to zoom, dozes off when idle), chat wallpaper (blurred by
+  default, three strength levels)
 - **Stability work**: link log persisted to disk (`link.log`, survives restarts), auto reconnect with session-stream reopen,
   silence probing, long-running task keepalive (survives screen-off), LAN/P2P direct path first with relay/TURN fallback
 - **Build & test**:

@@ -15,6 +15,7 @@ import { applyTint, darkPalette, lightPalette, Palette } from '../services/Theme
 import { OAuthProvider, clientVersion as appVersion } from '../net/ServerApi';
 import { t, english, LANG_SYSTEM, LANG_ZH, LANG_EN } from '../services/I18n';
 import { logWarn } from '../util/Log';
+import { LinkLog } from '../services/LinkLog';
 import {
   Breakpoint, FoldState, breakpointOf, contentColumnWidth, deviceColumns, foldStateOf,
   isCompactWidth, isExpandedWidth, mascotVisible
@@ -274,6 +275,9 @@ struct Index {
   /** 上一次触摸点的屏幕坐标（px）。用屏幕坐标，避开「组件被 scale 后局部坐标被缩放」的坑。 */
   private previewTouchX: number = 0;
   private previewTouchY: number = 0;
+  /** 本次拖动的原始像素增量累计，松手时写进 link.log 用于核对手感（px / vp / scale）。 */
+  private previewDragPxX: number = 0;
+  private previewDragPxY: number = 0;
   /** 输入坞上跟随手指/鼠标的光斑位置与强度。 */
   @State dockLightX: number = 0;
   @State dockLightY: number = 0;
@@ -6693,24 +6697,32 @@ struct Index {
     if (event.type === TouchType.Down) {
       this.previewTouchX = touch.screenX;
       this.previewTouchY = touch.screenY;
+      this.previewDragPxX = 0;
+      this.previewDragPxY = 0;
       return;
     }
     if (event.type === TouchType.Move) {
-      const density: number = this.pxPerVp > 0 ? this.pxPerVp : 1;
-      const dx: number = (touch.screenX - this.previewTouchX) / density;
-      const dy: number = (touch.screenY - this.previewTouchY) / density;
+      const rawDx: number = touch.screenX - this.previewTouchX;
+      const rawDy: number = touch.screenY - this.previewTouchY;
       this.previewTouchX = touch.screenX;
       this.previewTouchY = touch.screenY;
+      this.previewDragPxX = this.previewDragPxX + rawDx;
+      this.previewDragPxY = this.previewDragPxY + rawDy;
       if (this.previewScale <= 1) {
         return;
       }
-      this.previewOffsetX = this.previewOffsetX + dx * PREVIEW_PAN_GAIN;
-      this.previewOffsetY = this.previewOffsetY + dy * PREVIEW_PAN_GAIN;
+      const density: number = this.pxPerVp > 0 ? this.pxPerVp : 1;
+      this.previewOffsetX = this.previewOffsetX + rawDx / density * PREVIEW_PAN_GAIN;
+      this.previewOffsetY = this.previewOffsetY + rawDy / density * PREVIEW_PAN_GAIN;
       this.previewClampOffset();
       return;
     }
     if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
       this.previewClampOffset();
+      LinkLog.write('img', 'pan dx=' + Math.round(this.previewDragPxX) + 'px dy=' + Math.round(this.previewDragPxY)
+        + 'px vp/px=' + this.pxPerVp.toFixed(2) + ' scale=' + this.previewScale.toFixed(2)
+        + ' off=' + Math.round(this.previewOffsetX) + ',' + Math.round(this.previewOffsetY)
+        + ' win=' + Math.round(this.windowWidthVp) + 'x' + Math.round(this.windowHeightVp));
     }
   }
 
@@ -6754,12 +6766,19 @@ struct Index {
           .scale({ x: this.previewScale, y: this.previewScale })
           .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
           .onTouch((event: TouchEvent) => { this.onPreviewTouch(event); })
+          .hitTestBehavior(HitTestMode.Block)
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
                 .onActionStart(() => { this.onPreviewPinchStart(); })
                 .onActionUpdate((event: GestureEvent) => { this.onPreviewPinchUpdate(event.scale); })
                 .onActionEnd(() => { this.onPreviewGestureEnd(); }),
+              // 这个 Pan 不读 offset（拖动走 onTouch 的屏幕坐标增量），只负责「认领」手势：
+              // 否则单指拖动会被下面的会话列表当成滚动吃掉，预览层只收到 Cancel。
+              PanGesture()
+                .onActionStart(() => { })
+                .onActionUpdate(() => { })
+                .onActionEnd(() => { this.previewClampOffset(); }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
             )
@@ -6772,12 +6791,19 @@ struct Index {
           .scale({ x: this.previewScale, y: this.previewScale })
           .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
           .onTouch((event: TouchEvent) => { this.onPreviewTouch(event); })
+          .hitTestBehavior(HitTestMode.Block)
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
                 .onActionStart(() => { this.onPreviewPinchStart(); })
                 .onActionUpdate((event: GestureEvent) => { this.onPreviewPinchUpdate(event.scale); })
                 .onActionEnd(() => { this.onPreviewGestureEnd(); }),
+              // 这个 Pan 不读 offset（拖动走 onTouch 的屏幕坐标增量），只负责「认领」手势：
+              // 否则单指拖动会被下面的会话列表当成滚动吃掉，预览层只收到 Cancel。
+              PanGesture()
+                .onActionStart(() => { })
+                .onActionUpdate(() => { })
+                .onActionEnd(() => { this.previewClampOffset(); }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
             )

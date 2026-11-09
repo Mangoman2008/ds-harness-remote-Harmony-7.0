@@ -305,6 +305,10 @@ function buildEnglish(): Map<string, string> {
   map.set('主机操作', 'Host actions');
   map.set('主机版本', 'Host version');
   map.set('会话壁纸', 'Chat wallpaper');
+  map.set('壁纸强度', 'Wallpaper strength');
+  map.set('淡 · 壁纸更明显', 'Light · wallpaper shows more');
+  map.set('浓 · 更接近纯色', 'Strong · closer to solid');
+  map.set('中 · 平衡', 'Medium · balanced');
   map.set('壁纸已更新', 'Wallpaper updated');
   map.set('壁纸已移除', 'Wallpaper removed');
   map.set('已设置 · 自动虚化', 'Set · auto-blurred');

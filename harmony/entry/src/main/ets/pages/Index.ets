@@ -52,6 +52,8 @@ struct Index {
   @State uiSplitWidth: number = 0;
   /** 会话壁纸（压缩后的 JPEG base64）。 */
   @State wallpaper: string = '';
+  /** 壁纸压暗强度：0 淡 / 1 中 / 2 浓。 */
+  @State uiWallpaperDim: number = 1;
   /** 桌宠冒出来的俏皮话（2.6 秒后自动消失）。 */
   @State petQuip: string = '';
   /** 双击桌宠时的「炸屏」缩放倍数。 */
@@ -586,6 +588,7 @@ struct Index {
     this.uiNotifications = this.runtime.notificationsEnabled;
     this.uiSplitWidth = this.runtime.splitWidth;
     this.wallpaper = this.runtime.wallpaper;
+    this.uiWallpaperDim = this.runtime.wallpaperDim;
     this.restartPetAnimation();
     this.phase = this.runtime.phase;
     this.busy = this.runtime.busy;
@@ -2976,6 +2979,26 @@ struct Index {
     })
   }
 
+  /** 壁纸压暗色：淡/中/浓三档，深浅色各一套。 */
+  private wallpaperScrim(): string {
+    if (this.isDarkUi) {
+      return this.uiWallpaperDim === 0 ? 'rgba(10,14,24,0.42)'
+        : (this.uiWallpaperDim === 2 ? 'rgba(10,14,24,0.76)' : 'rgba(10,14,24,0.62)');
+    }
+    return this.uiWallpaperDim === 0 ? 'rgba(247,250,255,0.44)'
+      : (this.uiWallpaperDim === 2 ? 'rgba(247,250,255,0.78)' : 'rgba(247,250,255,0.64)');
+  }
+
+  private wallpaperDimLabel(): string {
+    if (this.uiWallpaperDim === 0) {
+      return this.tr('淡 · 壁纸更明显');
+    }
+    if (this.uiWallpaperDim === 2) {
+      return this.tr('浓 · 更接近纯色');
+    }
+    return this.tr('中 · 平衡');
+  }
+
   /** 助手气泡底色：没壁纸用半透明 inputBg；有壁纸就压实一点，别让照片纹理透进正文。 */
   private bubbleBg(): string {
     if (this.wallpaper.length === 0) {
@@ -4349,7 +4372,7 @@ struct Index {
           Column()
             .width('100%')
             .height('100%')
-            .backgroundColor(this.isDarkUi ? 'rgba(10,14,24,0.62)' : 'rgba(247,250,255,0.64)')
+            .backgroundColor(this.wallpaperScrim())
         }
         .width('100%')
         .height('100%')
@@ -6240,6 +6263,8 @@ struct Index {
           this.showSessionPanel = false;
         })
       Scroll() {
+      Column() {
+      ForEach([this.settingsRev], (rev: number) => {
       Column({ space: 0 }) {
         Row({ space: 8 }) {
           Text('🔍')
@@ -6441,6 +6466,7 @@ struct Index {
               .onClick(() => {
                 this.tapHaptic();
                 this.wallpaper = '';
+                this.settingsRev = this.settingsRev + 1;
                 this.runtime.setWallpaper('');
                 promptAction.showToast({ message: this.tr('壁纸已移除') });
               })
@@ -6448,6 +6474,37 @@ struct Index {
         }
         .width('100%')
         .padding({ left: 18, right: 18, top: 4, bottom: 12 })
+
+        // —— 壁纸强度（只在设了壁纸时出现）——
+        if (this.wallpaper.length > 0) {
+          Row({ space: 10 }) {
+            Column({ space: 3 }) {
+              Text(this.tr('壁纸强度'))
+                .fontSize(this.fs(11))
+                .fontColor(this.pal().text3)
+              Text(this.wallpaperDimLabel())
+                .fontSize(this.fs(12))
+                .fontColor(this.pal().text2)
+            }
+            .alignItems(HorizontalAlign.Start)
+            .layoutWeight(1)
+            Text(this.tr('切换'))
+              .fontSize(this.fs(12))
+              .fontColor('#22D3EE')
+              .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+              .backgroundColor('rgba(34,211,238,0.10)')
+              .borderRadius(10)
+              .onClick(() => {
+                this.tapHaptic();
+                const next: number = (this.uiWallpaperDim + 1) % 3;
+                this.uiWallpaperDim = next;
+                this.settingsRev = this.settingsRev + 1;
+                this.runtime.setWallpaperDim(next);
+              })
+          }
+          .width('100%')
+          .padding({ left: 18, right: 18, top: 4, bottom: 12 })
+        }
 
         // —— 定时任务 ——
         Row({ space: 10 }) {
@@ -6516,6 +6573,9 @@ struct Index {
       .backgroundColor(this.pal().panel)
       .borderRadius({ topLeft: 20, topRight: 20, bottomLeft: 0, bottomRight: 0 })
       .border({ width: 1, color: this.pal().border })
+      }, (rev: number) => 'session-body-' + rev)
+      }
+      .width('100%')
       }
       .scrollable(ScrollDirection.Vertical)
       .scrollBar(BarState.Off)

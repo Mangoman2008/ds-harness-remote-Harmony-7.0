@@ -38,6 +38,7 @@ const KEY_PET = 'dshremote.pet.v1';
 const KEY_SECRET_MASK = 'dshremote.secretMask.v1';
 /** 会话壁纸（压缩后的 JPEG base64；不是秘密，只存本地）。 */
 const KEY_WALLPAPER = 'dshremote.wallpaper.v1';
+const KEY_WALLPAPER_DIM = 'dshremote.wallpaperDim.v1';
 /** 多服务器/多账号：一份「已登录过的服务器」快照列表（含 token），存在 asset store 里。 */
 const ASSET_ALIAS_PROFILES = 'dshremote.profiles';
 
@@ -916,6 +917,21 @@ export class SecureStore {
   loadSecretMask(): boolean {
     // 默认开：宁可多遮，用户点一下就能看
     return this.getSync(KEY_SECRET_MASK, '1') === '1';
+  }
+
+  /** 壁纸压暗强度：0 淡 / 1 中 / 2 浓（默认 1）。 */
+  loadWallpaperDim(): number {
+    const raw: string = this.getSync(KEY_WALLPAPER_DIM, '1');
+    const parsed: number = Number.parseInt(raw);
+    return parsed >= 0 && parsed <= 2 ? parsed : 1;
+  }
+
+  saveWallpaperDim(level: number): void {
+    try {
+      this.putSync(KEY_WALLPAPER_DIM, String(level));
+    } catch (error) {
+      logWarn('wallpaper dim save failed');
+    }
   }
 
   loadWallpaper(): string {

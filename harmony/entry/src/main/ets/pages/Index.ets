@@ -3063,22 +3063,22 @@ struct Index {
     const frameH: number = Math.max(1, this.petFrameHeight());
     const viewW: number = this.windowWidthVp > 0 ? this.windowWidthVp : 400;
     const viewH: number = this.windowHeightVp > 0 ? this.windowHeightVp : 800;
-    // 覆盖整屏所需的倍数（宽高都盖住，取大的那个）
-    const target: number = Math.max(viewW / frameW, viewH / frameH) * 1.55;
+    // 覆盖整屏所需的倍数（宽高都盖住，取大的那个）；系数 1 = 刚好铺满
+    const target: number = Math.max(viewW / frameW, viewH / frameH);
     this.petBoomScale = 1;
     this.petBoomVisible = true;
-    animateTo({ duration: 380, curve: Curve.Friction }, () => {
+    animateTo({ duration: 580, curve: Curve.Friction }, () => {
       this.petBoomScale = target;
     });
     setTimeout(() => {
-      animateTo({ duration: 520, curve: Curve.EaseInOut }, () => {
+      animateTo({ duration: 680, curve: Curve.EaseInOut }, () => {
         this.petBoomScale = 1;
       });
       setTimeout(() => {
         this.petBoomVisible = false;
         this.petBooming = false;
-      }, 540);
-    }, 780);
+      }, 700);
+    }, 800);
   }
 
   /** 轻触反馈：设置行点按给一记很短的振动（拿不到振动器就安静跳过）。 */

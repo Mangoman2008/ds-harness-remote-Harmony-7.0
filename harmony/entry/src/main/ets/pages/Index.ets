@@ -6687,9 +6687,10 @@ struct Index {
       return;
     }
     // 手势给的是 px，translate 收的是 vp：不换算的话，放大后拖起来只有手指速度的 1/密度，很累。
+    // 主人实测 1:1 仍偏慢，这里按 2 倍增益（PEEK_PAN_GAIN）再放大一档。
     const density: number = this.pxPerVp > 0 ? this.pxPerVp : 1;
-    this.previewOffsetX = this.previewPanStartX + dx / density;
-    this.previewOffsetY = this.previewPanStartY + dy / density;
+    this.previewOffsetX = this.previewPanStartX + dx / density * PREVIEW_PAN_GAIN;
+    this.previewOffsetY = this.previewPanStartY + dy / density * PREVIEW_PAN_GAIN;
     this.previewClampOffset();
   }
 
@@ -9175,6 +9176,9 @@ class MdSegment {
   imageAlt: string = '';
   isImage: boolean = false;
 }
+
+/** 全屏预览里单指拖动的增益：1 = 与手指 1:1，2 = 手指移 1 格、图移 2 格。 */
+const PREVIEW_PAN_GAIN: number = 2;
 
 /** 把行内代码的占位符还原回原文（这些片段已排除在图片解析之外）。 */
 function restoreCodeSpans(text: string, spans: string[]): string {

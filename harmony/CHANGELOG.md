@@ -2,6 +2,13 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.108 — 2026-11-09
+
+对应 `AppScope/app.json5`：`versionName 0.17.108-lan` / `versionCode 1000230`。
+
+- 全屏预览的单指拖动增益按实测调成 **2×**（`PREVIEW_PAN_GAIN`，基准是「px→vp 换算后的 1:1」）：
+  1:1 仍偏慢，2× 更接近相册手感；边界夹取不变，图照样不会被拖出屏幕。
+
 ## 0.17.107 — 2026-11-09
 
 对应 `AppScope/app.json5`：`versionName 0.17.107-lan` / `versionCode 1000229`。

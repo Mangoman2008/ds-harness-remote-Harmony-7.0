@@ -271,8 +271,9 @@ struct Index {
   @State previewOffsetY: number = 0;
   /** 双指缩放/拖动的手势起点：不记起点就会按「累计位移」反复叠加，图片直接飘出屏幕。 */
   private previewScaleStart: number = 1;
-  private previewPanStartX: number = 0;
-  private previewPanStartY: number = 0;
+  /** 上一次触摸点的屏幕坐标（px）。用屏幕坐标，避开「组件被 scale 后局部坐标被缩放」的坑。 */
+  private previewTouchX: number = 0;
+  private previewTouchY: number = 0;
   /** 输入坞上跟随手指/鼠标的光斑位置与强度。 */
   @State dockLightX: number = 0;
   @State dockLightY: number = 0;
@@ -6677,21 +6678,40 @@ struct Index {
     this.previewClampOffset();
   }
 
-  private onPreviewPanStart(): void {
-    this.previewPanStartX = this.previewOffsetX;
-    this.previewPanStartY = this.previewOffsetY;
-  }
-
-  private onPreviewPanUpdate(dx: number, dy: number): void {
-    if (this.previewScale <= 1) {
+  /**
+   * 单指拖动：直接吃触摸点的**屏幕坐标**增量（px），换算成 vp 后叠加。
+   *
+   * 不用 PanGesture 的 offset 是因为它给的是组件局部坐标：图片放大 S 倍后局部坐标被缩小 S 倍，
+   * 于是「手指移一格、图只移 1/S 格」，越放大越拖不动；屏幕坐标不受 scale 影响。
+   */
+  private onPreviewTouch(event: TouchEvent): void {
+    const touches: TouchObject[] = event.touches;
+    if (touches.length !== 1) {
       return;
     }
-    // 手势给的是 px，translate 收的是 vp：不换算的话，放大后拖起来只有手指速度的 1/密度，很累。
-    // 主人实测 1:1 仍偏慢，这里按 2 倍增益（PEEK_PAN_GAIN）再放大一档。
-    const density: number = this.pxPerVp > 0 ? this.pxPerVp : 1;
-    this.previewOffsetX = this.previewPanStartX + dx / density * PREVIEW_PAN_GAIN;
-    this.previewOffsetY = this.previewPanStartY + dy / density * PREVIEW_PAN_GAIN;
-    this.previewClampOffset();
+    const touch: TouchObject = touches[0];
+    if (event.type === TouchType.Down) {
+      this.previewTouchX = touch.screenX;
+      this.previewTouchY = touch.screenY;
+      return;
+    }
+    if (event.type === TouchType.Move) {
+      const density: number = this.pxPerVp > 0 ? this.pxPerVp : 1;
+      const dx: number = (touch.screenX - this.previewTouchX) / density;
+      const dy: number = (touch.screenY - this.previewTouchY) / density;
+      this.previewTouchX = touch.screenX;
+      this.previewTouchY = touch.screenY;
+      if (this.previewScale <= 1) {
+        return;
+      }
+      this.previewOffsetX = this.previewOffsetX + dx * PREVIEW_PAN_GAIN;
+      this.previewOffsetY = this.previewOffsetY + dy * PREVIEW_PAN_GAIN;
+      this.previewClampOffset();
+      return;
+    }
+    if (event.type === TouchType.Up || event.type === TouchType.Cancel) {
+      this.previewClampOffset();
+    }
   }
 
   private onPreviewGestureEnd(): void {
@@ -6733,15 +6753,12 @@ struct Index {
           .objectFit(ImageFit.Contain)
           .scale({ x: this.previewScale, y: this.previewScale })
           .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
+          .onTouch((event: TouchEvent) => { this.onPreviewTouch(event); })
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
                 .onActionStart(() => { this.onPreviewPinchStart(); })
                 .onActionUpdate((event: GestureEvent) => { this.onPreviewPinchUpdate(event.scale); })
-                .onActionEnd(() => { this.onPreviewGestureEnd(); }),
-              PanGesture()
-                .onActionStart(() => { this.onPreviewPanStart(); })
-                .onActionUpdate((event: GestureEvent) => { this.onPreviewPanUpdate(event.offsetX, event.offsetY); })
                 .onActionEnd(() => { this.onPreviewGestureEnd(); }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
@@ -6754,15 +6771,12 @@ struct Index {
           .objectFit(ImageFit.Contain)
           .scale({ x: this.previewScale, y: this.previewScale })
           .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
+          .onTouch((event: TouchEvent) => { this.onPreviewTouch(event); })
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
                 .onActionStart(() => { this.onPreviewPinchStart(); })
                 .onActionUpdate((event: GestureEvent) => { this.onPreviewPinchUpdate(event.scale); })
-                .onActionEnd(() => { this.onPreviewGestureEnd(); }),
-              PanGesture()
-                .onActionStart(() => { this.onPreviewPanStart(); })
-                .onActionUpdate((event: GestureEvent) => { this.onPreviewPanUpdate(event.offsetX, event.offsetY); })
                 .onActionEnd(() => { this.onPreviewGestureEnd(); }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
@@ -9177,8 +9191,8 @@ class MdSegment {
   isImage: boolean = false;
 }
 
-/** 全屏预览里单指拖动的增益：1 = 与手指 1:1，2 = 手指移 1 格、图移 2 格。 */
-const PREVIEW_PAN_GAIN: number = 2;
+/** 全屏预览里单指拖动的增益：1 = 与手指 1:1（改大就会「不跟手」，只是更快）。 */
+const PREVIEW_PAN_GAIN: number = 1;
 
 /** 把行内代码的占位符还原回原文（这些片段已排除在图片解析之外）。 */
 function restoreCodeSpans(text: string, spans: string[]): string {

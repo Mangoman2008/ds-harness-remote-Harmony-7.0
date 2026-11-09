@@ -2,6 +2,16 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.109 — 2026-11-09
+
+对应 `AppScope/app.json5`：`versionName 0.17.109-lan` / `versionCode 1000231`。
+
+- **单指拖动改成吃屏幕坐标增量**：`PanGesture` 的 `offsetX` 是组件局部坐标，图片放大 S 倍后
+  局部坐标被缩小 S 倍，于是「手指移一格、图只移 1/S 格」，越放大越拖不动，只能靠加增益硬凑，
+  加了又不跟手。现在直接用 `TouchObject.screenX/screenY` 的增量（按 `pxPerVp` 换算），
+  与 scale 无关，拖动与手指 1:1。
+- 增益回到 1（`PREVIEW_PAN_GAIN`）；边界夹取不变。
+
 ## 0.17.108 — 2026-11-09
 
 对应 `AppScope/app.json5`：`versionName 0.17.108-lan` / `versionCode 1000230`。

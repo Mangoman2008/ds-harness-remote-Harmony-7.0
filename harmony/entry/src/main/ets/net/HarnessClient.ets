@@ -1,7 +1,7 @@
 import { RemoteClientCore } from './RemoteClientCore';
 import { logInfo, logWarn, logError } from '../util/Log';
 import { RemoteGateway, RemoteGatewayError, RemoteGatewayStream, StreamHandler } from './RemoteGateway';
-import { jsonStr, asRecord, asArray, asBool } from '../protocol/Types';
+import { jsonStr, jsonNum, asArray, asBool, asRecord } from '../protocol/Types';
 import { NetTrace } from '../util/NetTrace';
 
 /** 目录项（`host/listDirectory`）。 */
@@ -120,6 +120,9 @@ class AssistantStreamState {
  * create, prompt, cancel, history paging and the live `session/follow` stream.
  * Aggregated frames flow to `onFrame` for UI reduction.
  */
+/** 主机 workspaceFiles/readBytes 的单次读取上限（2 MiB）。 */
+const MAX_READ_BYTES: number = 2097152;
+
 export class HarnessAlphaClient {
   private core: RemoteClientCore;
   private gateway: RemoteGateway;
@@ -494,7 +497,35 @@ export class HarnessAlphaClient {
    * 主机侧 workspaceFiles/readBytes 允许读工作区外的文件，所以 /tmp 这类也能取。
    */
   async readFileBase64(sessionId: string, path: string): Promise<string> {
+    // 主机对单次读取有 2 MiB 上限，而「不带 range」会被当成要读默认的 4 MiB 窗口，
+    // 直接被拒（报 4194304 bytes exceed the 2097152 byte cap），再小的文件也读不出来。
+    // 所以先 stat 拿真实大小，再按实际字节数请求。
+    let size: number = 0;
+    try {
+      const statValue: Object = await this.callValue('workspaceFiles/stat', {
+        'workspaceFileScopeId': sessionId,
+        'path': path
+      });
+      const statRoot: Record<string, Object> | undefined = asRecord(statValue);
+      if (statRoot !== undefined) {
+        size = jsonNum(statRoot, 'size', 0);
+      }
+    } catch (error) {
+      logWarn('workspaceFiles/stat failed: ' + (error instanceof Error ? error.message : String(error)));
+    }
+    if (size > MAX_READ_BYTES) {
+      throw new Error('图片 ' + Math.round(size / 1024) + ' KB，超过主机单次读取上限 '
+        + Math.round(MAX_READ_BYTES / 1024) + ' KB，无法预览');
+    }
     const options: Record<string, Object> = {};
+    if (size > 0) {
+      const range: Record<string, Object> = { 'offset': 0, 'length': size };
+      options['range'] = range;
+    } else {
+      // 拿不到大小时按上限减 1 请求：主机的判定是「超过上限」，等于上限也有被拒的风险。
+      const range: Record<string, Object> = { 'offset': 0, 'length': MAX_READ_BYTES - 1 };
+      options['range'] = range;
+    }
     const args: Record<string, Object> = {
       'workspaceFileScopeId': sessionId,
       'path': path,

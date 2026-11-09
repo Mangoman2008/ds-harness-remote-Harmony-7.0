@@ -2,6 +2,15 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.114 / 0.17.115 — 2026-11-09
+
+预览拖动继续排查（诊断版）：
+
+- 0.17.114：把位移改回由 `PanGesture` 驱动（`起点 + event.offset`），并把 `event.offsetX/offsetY`
+  原值写进 `link.log`，用来确认它到底是 px 还是 vp。
+- 0.17.115：去掉 `onTouch` 与 `hitTestBehavior(Block)` —— 实测两者同时存在时 `PanGesture`
+  根本不触发，而单独 `onTouch` 只能收到零碎的 Move（300px 拖动只到 51px），这就是「慢 + 晃」。
+
 ## 0.17.112 / 0.17.113 — 2026-11-09
 
 - **主机路径图片读不出来（`图片加载失败`）的真正原因**：`workspaceFiles/readBytes` 不带 `range` 时，

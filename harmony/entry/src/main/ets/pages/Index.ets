@@ -278,6 +278,8 @@ struct Index {
   /** 本次拖动的原始像素增量累计，松手时写进 link.log 用于核对手感（px / vp / scale）。 */
   private previewDragPxX: number = 0;
   private previewDragPxY: number = 0;
+  private previewPanStartX: number = 0;
+  private previewPanStartY: number = 0;
   /** 输入坞上跟随手指/鼠标的光斑位置与强度。 */
   @State dockLightX: number = 0;
   @State dockLightY: number = 0;
@@ -6765,8 +6767,6 @@ struct Index {
           .objectFit(ImageFit.Contain)
           .scale({ x: this.previewScale, y: this.previewScale })
           .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
-          .onTouch((event: TouchEvent) => { this.onPreviewTouch(event); })
-          .hitTestBehavior(HitTestMode.Block)
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
@@ -6776,9 +6776,17 @@ struct Index {
               // 这个 Pan 不读 offset（拖动走 onTouch 的屏幕坐标增量），只负责「认领」手势：
               // 否则单指拖动会被下面的会话列表当成滚动吃掉，预览层只收到 Cancel。
               PanGesture()
-                .onActionStart(() => { })
-                .onActionUpdate(() => { })
-                .onActionEnd(() => { this.previewClampOffset(); }),
+                .onActionStart(() => { this.previewPanStartX = this.previewOffsetX; this.previewPanStartY = this.previewOffsetY; })
+                .onActionUpdate((event: GestureEvent) => {
+                  this.previewOffsetX = this.previewPanStartX + event.offsetX;
+                  this.previewOffsetY = this.previewPanStartY + event.offsetY;
+                  this.previewClampOffset();
+                })
+                .onActionEnd((event: GestureEvent) => {
+                  this.previewClampOffset();
+                  LinkLog.write('img', 'panGesture offsetX=' + Math.round(event.offsetX) + ' offsetY=' + Math.round(event.offsetY)
+                    + ' scale=' + this.previewScale.toFixed(2) + ' off=' + Math.round(this.previewOffsetX) + ',' + Math.round(this.previewOffsetY));
+                }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
             )
@@ -6790,8 +6798,6 @@ struct Index {
           .objectFit(ImageFit.Contain)
           .scale({ x: this.previewScale, y: this.previewScale })
           .translate({ x: this.previewOffsetX, y: this.previewOffsetY })
-          .onTouch((event: TouchEvent) => { this.onPreviewTouch(event); })
-          .hitTestBehavior(HitTestMode.Block)
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
@@ -6801,9 +6807,17 @@ struct Index {
               // 这个 Pan 不读 offset（拖动走 onTouch 的屏幕坐标增量），只负责「认领」手势：
               // 否则单指拖动会被下面的会话列表当成滚动吃掉，预览层只收到 Cancel。
               PanGesture()
-                .onActionStart(() => { })
-                .onActionUpdate(() => { })
-                .onActionEnd(() => { this.previewClampOffset(); }),
+                .onActionStart(() => { this.previewPanStartX = this.previewOffsetX; this.previewPanStartY = this.previewOffsetY; })
+                .onActionUpdate((event: GestureEvent) => {
+                  this.previewOffsetX = this.previewPanStartX + event.offsetX;
+                  this.previewOffsetY = this.previewPanStartY + event.offsetY;
+                  this.previewClampOffset();
+                })
+                .onActionEnd((event: GestureEvent) => {
+                  this.previewClampOffset();
+                  LinkLog.write('img', 'panGesture offsetX=' + Math.round(event.offsetX) + ' offsetY=' + Math.round(event.offsetY)
+                    + ' scale=' + this.previewScale.toFixed(2) + ' off=' + Math.round(this.previewOffsetX) + ',' + Math.round(this.previewOffsetY));
+                }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
             )

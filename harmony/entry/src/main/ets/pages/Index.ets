@@ -9149,6 +9149,15 @@ class MdSegment {
   isImage: boolean = false;
 }
 
+/** 把行内代码的占位符还原回原文（这些片段已排除在图片解析之外）。 */
+function restoreCodeSpans(text: string, spans: string[]): string {
+  let out: string = text;
+  for (let i = 0; i < spans.length; i += 1) {
+    out = out.split('\u0001' + String(i) + '\u0001').join(spans[i]);
+  }
+  return out;
+}
+
 /** 把一行里的 ![](src) 逐个切出来，其余当文字。 */
 function splitMdImages(body: string): MdSegment[] {
   const out: MdSegment[] = [];
@@ -9231,6 +9240,12 @@ function markdownLines(source: string): MdLine[] {
       entry.bullet = true;
       body = body.substring(2);
     }
+    // 行内代码里的字面量不是 Markdown：先摘出来，否则 `![](/x.png)` 会被当成图片去主机取文件。
+    const codeSpans: string[] = [];
+    body = body.replace(/`([^`]*)`/g, (match: string, inner: string) => {
+      codeSpans.push(inner);
+      return '\u0001' + String(codeSpans.length - 1) + '\u0001';
+    });
     body = body.split('`').join('');
     body = body.split('**').join('');
     body = body.split('__').join('');
@@ -9259,6 +9274,7 @@ function markdownLines(source: string): MdLine[] {
         textLine.text = segment.text.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g,
           (match: string, label: string, url: string) => `${label}（${url}）`);
       }
+      textLine.text = restoreCodeSpans(textLine.text, codeSpans);
       if (textLine.text.length > 0) {
         out.push(textLine);
       }

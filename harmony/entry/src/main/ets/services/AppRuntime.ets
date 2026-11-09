@@ -1164,6 +1164,8 @@ export class AppRuntime {
     try {
       return await harness.readFileBase64(sessionId, path);
     } catch (error) {
+      // 落到 link.log（hilog 缓冲很小，排查时经常已经被刷掉）
+      LinkLog.write('img', 'md image failed: ' + path + ' — ' + errorMessage(error));
       throw this.fileAccessHint(asError(error));
     }
   }

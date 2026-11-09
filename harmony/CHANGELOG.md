@@ -2,6 +2,16 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.105 — 2026-11-09
+
+对应 `AppScope/app.json5`：`versionName 0.17.105-lan` / `versionCode 1000227`。
+
+- **行内代码里的 `![](路径)` 不再被当成图片**：之前会真的去主机 `workspaceFiles/readBytes`，
+  被主机判 `outside the workspace` 后界面弹「图片加载失败」。现在行内代码片段先摘出来，
+  不参与图片解析。
+- 图片读取失败时把原因写进 `link.log`（`[img] md image failed: <路径> — <原因>`），
+  不再只写 hilog（缓冲很小，排查时常常已经被刷掉）。
+
 ## 0.17.104 — 2026-11-09
 
 对应 `AppScope/app.json5`：`versionName 0.17.104-lan` / `versionCode 1000226`。

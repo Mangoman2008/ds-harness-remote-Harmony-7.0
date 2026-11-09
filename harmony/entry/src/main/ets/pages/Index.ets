@@ -1605,8 +1605,9 @@ struct Index {
             .fontSize(this.fs(11))
             .fontColor(this.pal().text)
             .padding({ left: 10, right: 10, top: 6, bottom: 6 })
-            .backgroundColor(this.pal().panel)
-            .borderRadius(12)
+            // 和会话气泡用同一个底色与圆角，透明观感一致
+            .backgroundColor(this.pal().inputBg)
+            .borderRadius(14)
             .border({ width: 1, color: this.pal().border })
             .shadow({ radius: 10, color: 'rgba(0,0,0,0.12)', offsetX: 0, offsetY: 3 })
             .margin({ right: 6 })

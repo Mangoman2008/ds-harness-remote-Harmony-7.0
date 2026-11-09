@@ -304,6 +304,12 @@ function buildEnglish(): Map<string, string> {
   map.set('主机上的目录（绝对路径）', 'Directory on the host (absolute path)');
   map.set('主机操作', 'Host actions');
   map.set('主机版本', 'Host version');
+  map.set('会话壁纸', 'Chat wallpaper');
+  map.set('壁纸已更新', 'Wallpaper updated');
+  map.set('壁纸已移除', 'Wallpaper removed');
+  map.set('已设置 · 自动虚化', 'Set · auto-blurred');
+  map.set('移除', 'Remove');
+  map.set('无', 'None');
   map.set('主题色', 'Accent theme');
   map.set('会删除本机的草稿、提示词、收藏与最近访问，登录态和主机凭据不动。确定吗？', 'This deletes local drafts, prompts, favorites and recents. Sign-in and host credentials are kept. Continue?');
   map.set('会话 Markdown 已复制', 'Session Markdown copied');

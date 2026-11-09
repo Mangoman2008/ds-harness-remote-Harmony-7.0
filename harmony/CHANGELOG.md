@@ -2,6 +2,15 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.104 — 2026-11-09
+
+对应 `AppScope/app.json5`：`versionName 0.17.104-lan` / `versionCode 1000226`。
+
+- **Markdown 里的主机路径图片不再永远停在「图片加载中」**：图片解码完成/失败后，渲染行不会重建
+  （ArkUI 只跟踪读过的 `@State`），界面就一直挂着加载中。现在 `ForEach` 的 key 带上 `imageVersion`，
+  状态一变就重建；失败会显示「图片加载失败 + 重试」并写日志。
+- 失败过的图片不再自动重试（重建会再次触发 `onAppear`，会变成死循环）；重试只走「重试」按钮。
+
 ## 0.17.103 — 2026-11-09
 
 对应 `AppScope/app.json5`：`versionName 0.17.103-lan` / `versionCode 1000225`。评审整改。

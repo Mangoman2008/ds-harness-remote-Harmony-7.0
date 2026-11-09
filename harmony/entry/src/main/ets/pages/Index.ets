@@ -14,6 +14,7 @@ import { HarnessRemoteSession, HarnessSchedule, HarnessScheduleDelivery } from '
 import { applyTint, darkPalette, lightPalette, Palette } from '../services/Theme';
 import { OAuthProvider, clientVersion as appVersion } from '../net/ServerApi';
 import { t, english, LANG_SYSTEM, LANG_ZH, LANG_EN } from '../services/I18n';
+import { logWarn } from '../util/Log';
 import {
   Breakpoint, FoldState, breakpointOf, contentColumnWidth, deviceColumns, foldStateOf,
   isCompactWidth, isExpandedWidth, mascotVisible
@@ -6519,6 +6520,7 @@ struct Index {
   @Builder
   MarkdownText(text: string, streaming: boolean) {
     Column({ space: 5 }) {
+      // key 里带上 imageVersion：图片解码完成/失败后重建这些行，否则会一直停在「图片加载中」。
       ForEach(markdownLines(streaming ? text + '▍' : text), (line: MdLine, index: number) => {
         if (line.imageSrc.length > 0) {
           this.MdImage(line)
@@ -6577,7 +6579,7 @@ struct Index {
             .textAlign(TextAlign.Start)
             .copyOption(CopyOptions.LocalDevice)
         }
-      }, (line: MdLine, index: number) => index.toString())
+      }, (line: MdLine, index: number) => index.toString() + ':' + this.imageVersion)
     }
     .width('100%')
     .alignItems(HorizontalAlign.Start)
@@ -6870,6 +6872,10 @@ struct Index {
     if (this.images.has(src) || this.images.isPending(src)) {
       return;
     }
+    // 失败过的不要自动重试：重建会再次触发 onAppear，失败图会变成死循环；重试走「重试」按钮。
+    if (this.images.errorOf(src).length > 0) {
+      return;
+    }
     this.images.markPending(src);
     this.runtime.readImageBase64(src).then((base64: string) => {
       if (base64.length === 0) {
@@ -6880,6 +6886,7 @@ struct Index {
       this.images.put(src, pixel);
       this.imageVersion = this.imageVersion + 1;
     }).catch((error: Error) => {
+      logWarn('md image failed: ' + src + ' — ' + errorMessage(error));
       this.images.fail(src, errorMessage(error));
       this.imageVersion = this.imageVersion + 1;
     });

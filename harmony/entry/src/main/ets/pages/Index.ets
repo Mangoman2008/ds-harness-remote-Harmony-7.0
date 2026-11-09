@@ -136,6 +136,8 @@ struct Index {
   /** 窗口尺寸（vp），PC 上放大窗口时据此调整布局。 */
   @State windowWidthVp: number = 0;
   @State windowHeightVp: number = 0;
+  /** 1 vp 等于多少 px（手势给的是 px，translate 收的是 vp）。 */
+  private pxPerVp: number = 1;
   /** 当前窗口宽度落在哪个断点（xs/sm/md/lg/xl），布局判断统一走它。 */
   @State breakpoint: Breakpoint = 'sm';
   /** 折叠形态（展开 / 半折 / 折叠）；双折轴三折叠也归一到这三态。 */
@@ -487,6 +489,7 @@ struct Index {
     this.isLandscape = rect.width > rect.height;
     this.windowWidthVp = ui.px2vp(rect.width);
     this.windowHeightVp = ui.px2vp(rect.height);
+    this.pxPerVp = this.windowWidthVp > 0 ? rect.width / this.windowWidthVp : 1;
     this.breakpoint = breakpointOf(this.windowWidthVp);
   }
 
@@ -6683,8 +6686,10 @@ struct Index {
     if (this.previewScale <= 1) {
       return;
     }
-    this.previewOffsetX = this.previewPanStartX + dx;
-    this.previewOffsetY = this.previewPanStartY + dy;
+    // 手势给的是 px，translate 收的是 vp：不换算的话，放大后拖起来只有手指速度的 1/密度，很累。
+    const density: number = this.pxPerVp > 0 ? this.pxPerVp : 1;
+    this.previewOffsetX = this.previewPanStartX + dx / density;
+    this.previewOffsetY = this.previewPanStartY + dy / density;
     this.previewClampOffset();
   }
 

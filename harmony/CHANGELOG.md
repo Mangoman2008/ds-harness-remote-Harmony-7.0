@@ -2,6 +2,14 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.107 — 2026-11-09
+
+对应 `AppScope/app.json5`：`versionName 0.17.107-lan` / `versionCode 1000229`。
+
+- **预览里放大后拖动「很累」**：手势给的 `offsetX/offsetY` 是 px，`translate()` 收的是 vp，
+  没换算就只剩手指速度的 1/屏幕密度（这台机器约 3.3×）。现在按窗口实测的 `pxPerVp` 换算，
+  拖动与手指 1:1。
+
 ## 0.17.106 — 2026-11-09
 
 对应 `AppScope/app.json5`：`versionName 0.17.106-lan` / `versionCode 1000228`。

@@ -2654,7 +2654,8 @@ struct Index {
               })
               this.SettingsRow(this.tr('右侧详情栏'),
                 this.uiShowInspector ? this.tr('显示') : this.tr('隐藏'), false, () => {
-                  this.runtime.setShowInspector(!this.uiShowInspector);
+                  this.uiShowInspector = !this.uiShowInspector;
+                  this.runtime.setShowInspector(this.uiShowInspector);
                 })
               if (this.runtime.splitWidth > 0) {
                 this.SettingsRow(this.tr('会话栏宽度'),
@@ -2696,7 +2697,8 @@ struct Index {
               this.SettingsRow(this.tr('桌宠'),
                 this.uiPetEnabled ? this.tr('开 · 干活/等确认/完成 四态') : this.tr('关'),
                 false, () => {
-                  this.runtime.setPetEnabled(!this.uiPetEnabled);
+                  this.uiPetEnabled = !this.uiPetEnabled;
+                  this.runtime.setPetEnabled(this.uiPetEnabled);
                 })
               this.SettingsRow(this.tr('主题色'), this.themeTintLabel(), false, () => {
                 AlertDialog.show({
@@ -6116,6 +6118,7 @@ struct Index {
                 .borderRadius(10)
                 .border({ width: 1, color: this.pal().border })
                 .onClick(() => {
+                  this.permissionPreset = preset;
                   this.runtime.selectPermission(preset);
                 })
             }, (preset: string) => preset)
@@ -6193,6 +6196,8 @@ struct Index {
             })
         }
         .width('100%')
+        // 这一行之前漏了左右内边距，导致「定时任务」贴边、值和按钮错位
+        .padding({ left: 18, right: 18, top: 4, bottom: 12 })
 
         // —— 连接 ——
         Row({ space: 10 }) {
@@ -7861,6 +7866,7 @@ struct Index {
           .backgroundColor(this.uiThemeTint === tint ? this.pal().inputBg : Color.Transparent)
           .borderRadius(12)
           .onClick(() => {
+            this.uiThemeTint = tint;
             this.runtime.setThemeTint(tint);
           })
         }, (tint: number) => 'tint-' + tint)

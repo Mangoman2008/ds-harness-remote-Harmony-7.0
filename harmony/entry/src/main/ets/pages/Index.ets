@@ -4515,6 +4515,12 @@ struct Index {
             this.runtime.refreshModelCatalog();
           }
           this.runtime.refreshPermissionState();
+          // 先把键盘收掉，否则会话设置底部（壁纸/连接状态）会被输入法挡住
+          try {
+            this.getUIContext().getFocusController().clearFocus();
+          } catch (error) {
+            logWarn('clear focus failed');
+          }
           this.showSessionPanel = true;
         })
         this.TopIcon($r('app.media.ic_plus'), () => {

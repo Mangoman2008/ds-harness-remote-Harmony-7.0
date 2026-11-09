@@ -57,7 +57,6 @@ struct Index {
   /** 桌宠冒出来的俏皮话（2.6 秒后自动消失）。 */
   @State petQuip: string = '';
   /** 双击桌宠时的「炸屏」缩放倍数。 */
-  @State petBoom: number = 1;
   /** 炸屏专用全屏层：单独一层，保证真的铺满整屏（不再靠小挂件自己放大）。 */
   @State petBoomVisible: boolean = false;
   @State petBoomScale: number = 1;

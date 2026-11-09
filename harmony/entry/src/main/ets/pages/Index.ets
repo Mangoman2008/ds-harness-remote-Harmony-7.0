@@ -60,7 +60,11 @@ struct Index {
   /** 炸屏专用全屏层：单独一层，保证真的铺满整屏（不再靠小挂件自己放大）。 */
   @State petBoomVisible: boolean = false;
   @State petBoomScale: number = 1;
+  /** 炸屏层的透明度：层常驻挂载，动画才有组件可作用（反复挂载会让 animateTo 失效）。 */
+  @State petBoomOpacity: number = 0;
   private petQuipTimer: number = -1;
+  private petLastTap: number = 0;
+  private petTapTimer: number = -1;
   /** 会话空闲起点（毫秒）；待命超过 3 分钟就让桌宠睡着。 */
   private petIdleSince: number = 0;
   private petSleepTimer: number = -1;
@@ -1634,16 +1638,9 @@ struct Index {
         .border({ width: 1, color: this.pal().border })
         .margin({ bottom: 4 })
         // 双击优先：onClick 会和 TapGesture(count:2) 抢事件，双击永远轮不到
-        .gesture(
-          GestureGroup(GestureMode.Exclusive,
-            TapGesture({ count: 2 }).onAction(() => {
-              this.playPetBoom();
-            }),
-            TapGesture({ count: 1 }).onAction(() => {
-              this.sayPetQuip();
-            })
-          )
-        )
+        .onClick(() => {
+          this.onPetTap();
+        })
         // 长按桌宠 = 导出诊断文件（现场排障的快捷键，不用翻抽屉找诊断面板）
         .gesture(LongPressGesture().onAction(() => {
           const path: string = this.runtime.exportDiagnosticsToFile();
@@ -1688,6 +1685,9 @@ struct Index {
     .height(this.windowHeightVp > 0 ? this.windowHeightVp : 800)
     .position({ x: 0, y: -this.topSafePadding() })
     .zIndex(90)
+    .opacity(this.petBoomOpacity)
+    // 不在炸屏时彻底不参与布局与命中测试，否则它会挡住桌宠的点击
+    .visibility(this.petBoomVisible ? Visibility.Visible : Visibility.None)
     .hitTestBehavior(HitTestMode.None)
   }
 
@@ -2424,7 +2424,7 @@ struct Index {
       if (this.choiceOpen) {
         this.ChoiceSheetOverlay()
       }
-      // 炸屏：独立全屏层，把当前帧按「覆盖整屏」的倍数放大再回落
+      // 炸屏：独立全屏层（只在播放期间挂载，平时不参与命中测试）
       if (this.petBoomVisible) {
         this.PetBoomOverlay()
       }
@@ -3063,6 +3063,28 @@ struct Index {
     }
   }
 
+  /** 单击/双击的统一入口：320ms 内第二下算双击（炸屏），否则延时 320ms 说俏皮话。 */
+  private onPetTap(): void {
+    const now: number = Date.now();
+    if (now - this.petLastTap < 320) {
+      this.petLastTap = 0;
+      if (this.petTapTimer >= 0) {
+        clearTimeout(this.petTapTimer);
+        this.petTapTimer = -1;
+      }
+      this.playPetBoom();
+      return;
+    }
+    this.petLastTap = now;
+    if (this.petTapTimer >= 0) {
+      clearTimeout(this.petTapTimer);
+    }
+    this.petTapTimer = setTimeout(() => {
+      this.petTapTimer = -1;
+      this.sayPetQuip();
+    }, 320);
+  }
+
   /** 点一下桌宠：按当前状态随机说一句俏皮话。 */
   private sayPetQuip(): void {
     if (this.petIdleSince > 0 && Date.now() - this.petIdleSince > 180000) {
@@ -3106,12 +3128,18 @@ struct Index {
     const target: number = Math.max(viewW / frameW, viewH / frameH) * 0.85;
     this.petBoomScale = 1;
     this.petBoomVisible = true;
+    animateTo({ duration: 120, curve: Curve.EaseOut }, () => {
+      this.petBoomOpacity = 1;
+    });
     animateTo({ duration: 580, curve: Curve.Friction }, () => {
       this.petBoomScale = target;
     });
     setTimeout(() => {
       animateTo({ duration: 680, curve: Curve.EaseInOut }, () => {
         this.petBoomScale = 1;
+      });
+      animateTo({ duration: 520, curve: Curve.EaseIn }, () => {
+        this.petBoomOpacity = 0;
       });
       setTimeout(() => {
         this.petBoomVisible = false;

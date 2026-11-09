@@ -2976,6 +2976,14 @@ struct Index {
     })
   }
 
+  /** 助手气泡底色：没壁纸用半透明 inputBg；有壁纸就压实一点，别让照片纹理透进正文。 */
+  private bubbleBg(): string {
+    if (this.wallpaper.length === 0) {
+      return this.pal().inputBg;
+    }
+    return this.isDarkUi ? 'rgba(20,24,36,0.94)' : 'rgba(255,255,255,0.94)';
+  }
+
   /** 选一张壁纸：压到长边 720、JPEG q70 再存（虚化后不需要高清）。 */
   private async openWallpaperPicker(): Promise<void> {
     try {
@@ -7145,10 +7153,8 @@ struct Index {
                   this.previewOffsetY = this.previewPanStartY + event.offsetY * gain;
                   this.previewClampOffset();
                 })
-                .onActionEnd((event: GestureEvent) => {
+                .onActionEnd(() => {
                   this.previewClampOffset();
-                  LinkLog.write('img', 'panGesture offsetX=' + Math.round(event.offsetX) + ' offsetY=' + Math.round(event.offsetY)
-                    + ' scale=' + this.previewScale.toFixed(2) + ' off=' + Math.round(this.previewOffsetX) + ',' + Math.round(this.previewOffsetY));
                 }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
@@ -7181,10 +7187,8 @@ struct Index {
                   this.previewOffsetY = this.previewPanStartY + event.offsetY * gain;
                   this.previewClampOffset();
                 })
-                .onActionEnd((event: GestureEvent) => {
+                .onActionEnd(() => {
                   this.previewClampOffset();
-                  LinkLog.write('img', 'panGesture offsetX=' + Math.round(event.offsetX) + ' offsetY=' + Math.round(event.offsetY)
-                    + ' scale=' + this.previewScale.toFixed(2) + ' off=' + Math.round(this.previewOffsetX) + ',' + Math.round(this.previewOffsetY));
                 }),
               TapGesture({ count: 2 })
                 .onAction(() => { this.onPreviewDoubleTap(); })
@@ -7586,7 +7590,7 @@ struct Index {
           }
         }
         .padding({ top: 10, bottom: 10, left: 14, right: 14 })
-        .backgroundColor(this.pal().inputBg)
+        .backgroundColor(this.bubbleBg())
         .borderRadius(16)
         .alignItems(HorizontalAlign.Start)
         .gesture(LongPressGesture().onAction(() => {

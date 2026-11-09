@@ -267,6 +267,10 @@ struct Index {
   @State previewScale: number = 1;
   @State previewOffsetX: number = 0;
   @State previewOffsetY: number = 0;
+  /** 双指缩放/拖动的手势起点：不记起点就会按「累计位移」反复叠加，图片直接飘出屏幕。 */
+  private previewScaleStart: number = 1;
+  private previewPanStartX: number = 0;
+  private previewPanStartY: number = 0;
   /** 输入坞上跟随手指/鼠标的光斑位置与强度。 */
   @State dockLightX: number = 0;
   @State dockLightY: number = 0;
@@ -6650,6 +6654,56 @@ struct Index {
     this.previewActive = true;
   }
 
+  /**
+   * 把平移量夹在「放大后仍覆盖屏幕」的范围内。
+   * 之前完全不夹：连续拖动会把图整张推出屏幕，看起来就像图丢了。
+   */
+  private previewClampOffset(): void {
+    const maxX: number = Math.max(0, this.windowWidthVp * (this.previewScale - 1) / 2);
+    const maxY: number = Math.max(0, this.windowHeightVp * (this.previewScale - 1) / 2);
+    this.previewOffsetX = Math.min(maxX, Math.max(-maxX, this.previewOffsetX));
+    this.previewOffsetY = Math.min(maxY, Math.max(-maxY, this.previewOffsetY));
+  }
+
+  private onPreviewPinchStart(): void {
+    this.previewScaleStart = this.previewScale;
+  }
+
+  private onPreviewPinchUpdate(scale: number): void {
+    this.previewScale = Math.min(6, Math.max(1, this.previewScaleStart * scale));
+    this.previewClampOffset();
+  }
+
+  private onPreviewPanStart(): void {
+    this.previewPanStartX = this.previewOffsetX;
+    this.previewPanStartY = this.previewOffsetY;
+  }
+
+  private onPreviewPanUpdate(dx: number, dy: number): void {
+    if (this.previewScale <= 1) {
+      return;
+    }
+    this.previewOffsetX = this.previewPanStartX + dx;
+    this.previewOffsetY = this.previewPanStartY + dy;
+    this.previewClampOffset();
+  }
+
+  private onPreviewGestureEnd(): void {
+    if (this.previewScale <= 1.02) {
+      this.previewScale = 1;
+      this.previewOffsetX = 0;
+      this.previewOffsetY = 0;
+      return;
+    }
+    this.previewClampOffset();
+  }
+
+  private onPreviewDoubleTap(): void {
+    this.previewScale = this.previewScale > 1.05 ? 1 : 2.5;
+    this.previewOffsetX = 0;
+    this.previewOffsetY = 0;
+  }
+
   /** 读一下 imageVersion，让预览层在图片解码完成后自动重建。 */
   private previewReady(): boolean {
     const version: number = this.imageVersion;
@@ -6676,31 +6730,15 @@ struct Index {
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
-                .onActionUpdate((event: GestureEvent) => {
-                  this.previewScale = Math.min(6, Math.max(1, event.scale));
-                })
-                .onActionEnd(() => {
-                  if (this.previewScale <= 1.02) {
-                    this.previewScale = 1;
-                    this.previewOffsetX = 0;
-                    this.previewOffsetY = 0;
-                  }
-                }),
+                .onActionStart(() => { this.onPreviewPinchStart(); })
+                .onActionUpdate((event: GestureEvent) => { this.onPreviewPinchUpdate(event.scale); })
+                .onActionEnd(() => { this.onPreviewGestureEnd(); }),
               PanGesture()
-                .onActionUpdate((event: GestureEvent) => {
-                  if (this.previewScale <= 1) {
-                    return;
-                  }
-                  this.previewOffsetX = this.previewOffsetX + event.offsetX;
-                  this.previewOffsetY = this.previewOffsetY + event.offsetY;
-                }),
+                .onActionStart(() => { this.onPreviewPanStart(); })
+                .onActionUpdate((event: GestureEvent) => { this.onPreviewPanUpdate(event.offsetX, event.offsetY); })
+                .onActionEnd(() => { this.onPreviewGestureEnd(); }),
               TapGesture({ count: 2 })
-                .onAction(() => {
-                  const doubled: boolean = this.previewScale > 1.05;
-                  this.previewScale = doubled ? 1 : 2.5;
-                  this.previewOffsetX = 0;
-                  this.previewOffsetY = 0;
-                })
+                .onAction(() => { this.onPreviewDoubleTap(); })
             )
           )
       } else if (this.previewReady()) {
@@ -6713,31 +6751,15 @@ struct Index {
           .gesture(
             GestureGroup(GestureMode.Parallel,
               PinchGesture({ fingers: 2 })
-                .onActionUpdate((event: GestureEvent) => {
-                  this.previewScale = Math.min(6, Math.max(1, event.scale));
-                })
-                .onActionEnd(() => {
-                  if (this.previewScale <= 1.02) {
-                    this.previewScale = 1;
-                    this.previewOffsetX = 0;
-                    this.previewOffsetY = 0;
-                  }
-                }),
+                .onActionStart(() => { this.onPreviewPinchStart(); })
+                .onActionUpdate((event: GestureEvent) => { this.onPreviewPinchUpdate(event.scale); })
+                .onActionEnd(() => { this.onPreviewGestureEnd(); }),
               PanGesture()
-                .onActionUpdate((event: GestureEvent) => {
-                  if (this.previewScale <= 1) {
-                    return;
-                  }
-                  this.previewOffsetX = this.previewOffsetX + event.offsetX;
-                  this.previewOffsetY = this.previewOffsetY + event.offsetY;
-                }),
+                .onActionStart(() => { this.onPreviewPanStart(); })
+                .onActionUpdate((event: GestureEvent) => { this.onPreviewPanUpdate(event.offsetX, event.offsetY); })
+                .onActionEnd(() => { this.onPreviewGestureEnd(); }),
               TapGesture({ count: 2 })
-                .onAction(() => {
-                  const doubled: boolean = this.previewScale > 1.05;
-                  this.previewScale = doubled ? 1 : 2.5;
-                  this.previewOffsetX = 0;
-                  this.previewOffsetY = 0;
-                })
+                .onAction(() => { this.onPreviewDoubleTap(); })
             )
           )
       }

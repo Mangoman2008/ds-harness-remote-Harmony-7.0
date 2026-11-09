@@ -2,6 +2,14 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.117 — 2026-11-10
+
+对应 `AppScope/app.json5`：`versionName 0.17.117-lan` / `versionCode 1000239`。
+
+- **拖动速度随放大倍数走**：1:1 在 1.5 倍时手感正好，再放大就会觉得「拖不动」——因为同样的
+  手指位移在高倍下覆盖的图片内容更少。现在以 **1.5 倍为基准**线性放大拖动增益
+  （`PREVIEW_PAN_REFERENCE_SCALE`），封顶 3 倍（`PREVIEW_PAN_MAX_GAIN`），高倍下不会再拖沓。
+
 ## 0.17.116 — 2026-11-09
 
 - 结论落定：ArkUI 的 `PanGesture` 位移量 `offsetX/offsetY` 单位是 **vp**（官方文档），

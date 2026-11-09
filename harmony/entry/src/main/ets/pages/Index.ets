@@ -6729,8 +6729,13 @@ struct Index {
               PanGesture()
                 .onActionStart(() => { this.previewPanStartX = this.previewOffsetX; this.previewPanStartY = this.previewOffsetY; })
                 .onActionUpdate((event: GestureEvent) => {
-                  this.previewOffsetX = this.previewPanStartX + event.offsetX;
-                  this.previewOffsetY = this.previewPanStartY + event.offsetY;
+                  // 放大越多，手指同样的位移走过的「图片内容」越少，手感就越拖沓。
+                  // 用 1.5 倍作为基准（那个倍数下手感已确认舒服），往上按倍数放大拖动速度，
+                  // 封顶 3 倍，避免高倍时过于灵敏。
+                  const gain: number = Math.min(PREVIEW_PAN_MAX_GAIN,
+                    Math.max(1, this.previewScale / PREVIEW_PAN_REFERENCE_SCALE));
+                  this.previewOffsetX = this.previewPanStartX + event.offsetX * gain;
+                  this.previewOffsetY = this.previewPanStartY + event.offsetY * gain;
                   this.previewClampOffset();
                 })
                 .onActionEnd((event: GestureEvent) => {
@@ -6760,8 +6765,13 @@ struct Index {
               PanGesture()
                 .onActionStart(() => { this.previewPanStartX = this.previewOffsetX; this.previewPanStartY = this.previewOffsetY; })
                 .onActionUpdate((event: GestureEvent) => {
-                  this.previewOffsetX = this.previewPanStartX + event.offsetX;
-                  this.previewOffsetY = this.previewPanStartY + event.offsetY;
+                  // 放大越多，手指同样的位移走过的「图片内容」越少，手感就越拖沓。
+                  // 用 1.5 倍作为基准（那个倍数下手感已确认舒服），往上按倍数放大拖动速度，
+                  // 封顶 3 倍，避免高倍时过于灵敏。
+                  const gain: number = Math.min(PREVIEW_PAN_MAX_GAIN,
+                    Math.max(1, this.previewScale / PREVIEW_PAN_REFERENCE_SCALE));
+                  this.previewOffsetX = this.previewPanStartX + event.offsetX * gain;
+                  this.previewOffsetY = this.previewPanStartY + event.offsetY * gain;
                   this.previewClampOffset();
                 })
                 .onActionEnd((event: GestureEvent) => {
@@ -9182,8 +9192,10 @@ class MdSegment {
   isImage: boolean = false;
 }
 
-/** 全屏预览里单指拖动的增益：1 = 与手指 1:1（改大就会「不跟手」，只是更快）。 */
-const PREVIEW_PAN_GAIN: number = 1;
+/** 预览拖动的基准倍数：这个放大倍数下 1:1 的手感已被确认舒服。 */
+const PREVIEW_PAN_REFERENCE_SCALE: number = 1.5;
+/** 放大后拖动速度的上限倍数，避免高倍时过于灵敏。 */
+const PREVIEW_PAN_MAX_GAIN: number = 3;
 
 /** 把行内代码的占位符还原回原文（这些片段已排除在图片解析之外）。 */
 function restoreCodeSpans(text: string, spans: string[]): string {

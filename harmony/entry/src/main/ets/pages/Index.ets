@@ -62,6 +62,9 @@ struct Index {
   @State petBoomVisible: boolean = false;
   @State petBoomScale: number = 1;
   private petQuipTimer: number = -1;
+  /** 会话空闲起点（毫秒）；待命超过 3 分钟就让桌宠睡着。 */
+  private petIdleSince: number = 0;
+  private petSleepTimer: number = -1;
   private petBooming: boolean = false;
   /** 输入坞实际高度（输入框长高时桌宠跟着上移）。 */
   @State dockHeight: number = 60;
@@ -338,12 +341,22 @@ struct Index {
       this.maidBob = !this.maidBob;
     }, 2000);
     // 桌宠精灵图：素材（dsh-go 的 whale-girl 包）只在本机存在，缺省时自动回退到 emoji
+    this.petSleepTimer = setInterval(() => {
+      if (this.runtime.petState() === 'idle' && this.petIdleSince > 0
+        && Date.now() - this.petIdleSince > 180000) {
+        this.restartPetAnimation();
+      }
+    }, 30000);
     PetPack.load(getContext(this)).then(() => {
       this.restartPetAnimation();
     }).catch(() => undefined);
   }
 
   aboutToDisappear(): void {
+    if (this.petSleepTimer >= 0) {
+      clearInterval(this.petSleepTimer);
+      this.petSleepTimer = -1;
+    }
     this.stopPetAnimation();
     if (this.maidTimer >= 0) {
       clearInterval(this.maidTimer);
@@ -589,6 +602,13 @@ struct Index {
     this.uiSplitWidth = this.runtime.splitWidth;
     this.wallpaper = this.runtime.wallpaper;
     this.uiWallpaperDim = this.runtime.wallpaperDim;
+    if (this.runtime.petState() === 'idle') {
+      if (this.petIdleSince === 0) {
+        this.petIdleSince = Date.now();
+      }
+    } else {
+      this.petIdleSince = 0;
+    }
     this.restartPetAnimation();
     this.phase = this.runtime.phase;
     this.busy = this.runtime.busy;
@@ -1538,7 +1558,9 @@ struct Index {
     if (!PetPack.ready()) {
       return;
     }
-    const next: string = PetPack.animNameFor(this.runtime.petState());
+    const sleepy: boolean = this.runtime.petState() === 'idle' && this.petIdleSince > 0
+      && Date.now() - this.petIdleSince > 180000 && PetPack.anim('sleeping') !== undefined;
+    const next: string = sleepy ? 'sleeping' : PetPack.animNameFor(this.runtime.petState());
     if (next.length === 0 || next === this.petAnim) {
       return;
     }
@@ -3044,6 +3066,11 @@ struct Index {
 
   /** 点一下桌宠：按当前状态随机说一句俏皮话。 */
   private sayPetQuip(): void {
+    if (this.petIdleSince > 0 && Date.now() - this.petIdleSince > 180000) {
+      // 睡着被点醒：重新计时，动画切回 idle
+      this.petIdleSince = Date.now();
+      this.restartPetAnimation();
+    }
     const state: string = this.runtime.petState();
     const pool: string[] = state === 'working'
       ? ['别催别催，正在想…', '键盘都要冒烟了', '这活儿有点难，等我捋捋', '先把思路理顺再动手',

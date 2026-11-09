@@ -34,7 +34,7 @@ export class PetAnim {
 
 const PACK_DIR = 'pets/whale-girl';
 /** 只解码实际用到的几段动画，避免把 20 多张图全塞进内存。 */
-const WANTED: string[] = ['idle', 'typing', 'thinking', 'happy'];
+const WANTED: string[] = ['idle', 'typing', 'thinking', 'happy', 'sleeping'];
 
 class PetPackStore {
   private anims: Map<string, PetAnim> = new Map<string, PetAnim>();

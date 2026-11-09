@@ -99,7 +99,7 @@ Host 公钥固定（`saveHostPins`）保持原样：那是公钥，不是秘密�
 | 项 | 结果 |
 |---|---|
 | `harmony/entry/src/main/ets` 全量编译 | ✅ `harmony/scripts/build-local.sh` BUILD SUCCESSFUL（33 tasks） |
-| 签名 HAP 产出 | ✅ `harmony/entry/build/default/outputs/default/entry-default-signed.hap`，2,780,181 B，`0.17.103-lan / 1000225` |
+| 签名 HAP 产出 | ✅ `harmony/entry/build/default/outputs/default/entry-default-signed.hap`，2,779,876 B，`0.17.104-lan / 1000226` |
 | 装机冒烟 | ✅ 手机（无线调试）与鸿蒙 PC 均安装启动、`已连接 · lan`、无 ArkTS 崩溃（见 `harmony/scripts/smoke.sh`） |
 | SecureStore 失败场景 | ✅ 10/10（见 2.3） |
 | 新增测试文件类型检查 | ✅ `tsc --noEmit` 通过 |
@@ -124,6 +124,13 @@ harmony/scripts/smoke.sh 127.0.0.1:40601        # 鸿蒙 PC
 # 一致性测试（CI 同款命令）
 pnpm exec vitest run harmony/tests
 ```
+
+## 4.1 顺带修的一处：Markdown 里的主机路径图片
+
+排查文件卡片时发现的独立缺陷：消息里 `![](/主机/路径.png)` 这种图，解码完成或失败后行不会重建
+（ArkUI 只跟踪读过的 `@State`），界面就永远停在「图片加载中」。现在 `ForEach` key 带上 `imageVersion`，
+状态一变就重建；失败显示「图片加载失败 + 重试」并写日志；失败过的图不自动重试（否则重建触发
+`onAppear` 会死循环）。版本 `0.17.104-lan / 1000226`。
 
 ## 5. 演示材料
 

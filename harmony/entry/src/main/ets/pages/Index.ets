@@ -3020,14 +3020,6 @@ struct Index {
     return this.tr('中 · 平衡');
   }
 
-  /** 助手气泡底色：没壁纸用半透明 inputBg；有壁纸就压实一点，别让照片纹理透进正文。 */
-  private bubbleBg(): string {
-    if (this.wallpaper.length === 0) {
-      return this.pal().inputBg;
-    }
-    return this.isDarkUi ? 'rgba(20,24,36,0.94)' : 'rgba(255,255,255,0.94)';
-  }
-
   /** 选一张壁纸：压到长边 720、JPEG q70 再存（虚化后不需要高清）。 */
   private async openWallpaperPicker(): Promise<void> {
     try {
@@ -7704,7 +7696,7 @@ struct Index {
           }
         }
         .padding({ top: 10, bottom: 10, left: 14, right: 14 })
-        .backgroundColor(this.bubbleBg())
+        .backgroundColor(this.pal().inputBg)
         .borderRadius(16)
         .alignItems(HorizontalAlign.Start)
         .gesture(LongPressGesture().onAction(() => {

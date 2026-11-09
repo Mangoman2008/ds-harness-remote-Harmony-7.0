@@ -9195,7 +9195,7 @@ class MdSegment {
 /** 预览拖动的基准倍数：这个放大倍数下 1:1 的手感已被确认舒服。 */
 const PREVIEW_PAN_REFERENCE_SCALE: number = 1.5;
 /** 放大后拖动速度的上限倍数，避免高倍时过于灵敏。 */
-const PREVIEW_PAN_MAX_GAIN: number = 3;
+const PREVIEW_PAN_MAX_GAIN: number = 4;
 
 /** 把行内代码的占位符还原回原文（这些片段已排除在图片解析之外）。 */
 function restoreCodeSpans(text: string, spans: string[]): string {

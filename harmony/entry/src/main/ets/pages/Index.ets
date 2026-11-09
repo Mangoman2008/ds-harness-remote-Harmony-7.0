@@ -2212,11 +2212,12 @@ struct Index {
             .width('100%')
             .height('100%')
             .objectFit(ImageFit.Cover)
-            .blur(24)
+            .blur(16)
+          // 压一层浅色/暗色底：既要看得见壁纸，又不能抢文字
           Column()
             .width('100%')
             .height('100%')
-            .backgroundColor(this.isDarkUi ? 'rgba(10,14,24,0.78)' : 'rgba(247,250,255,0.82)')
+            .backgroundColor(this.isDarkUi ? 'rgba(10,14,24,0.62)' : 'rgba(247,250,255,0.64)')
         }
         .height(this.windowHeightVp > 0 ? this.windowHeightVp : 800)
         .position({ x: 0, y: -this.topSafePadding() })
@@ -3064,7 +3065,7 @@ struct Index {
     const viewW: number = this.windowWidthVp > 0 ? this.windowWidthVp : 400;
     const viewH: number = this.windowHeightVp > 0 ? this.windowHeightVp : 800;
     // 覆盖整屏所需的倍数（宽高都盖住，取大的那个）；系数 1 = 刚好铺满
-    const target: number = Math.max(viewW / frameW, viewH / frameH);
+    const target: number = Math.max(viewW / frameW, viewH / frameH) * 0.85;
     this.petBoomScale = 1;
     this.petBoomVisible = true;
     animateTo({ duration: 580, curve: Curve.Friction }, () => {

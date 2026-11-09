@@ -27,11 +27,12 @@ import { PromptImagePart } from '../net/HarnessClient';
 import { RtcBridge } from '../services/RtcBridge';
 import { heartbeatBodyOf } from '../services/Heartbeat';
 import { image } from '@kit.ImageKit';
+import { vibrator } from '@kit.SensorServiceKit';
 import { util } from '@kit.ArkTS';
 import BuildProfile from 'BuildProfile';
 
 /** 桌宠精灵图放大倍数（像素风，整数倍最清晰）。 */
-const PET_SCALE: number = 1;
+const PET_SCALE: number = 1.2;
 
 @Entry
 @Component
@@ -46,6 +47,9 @@ struct Index {
   @State uiPetEnabled: boolean = true;
   @State uiThemeTint: number = 0;
   @State uiCompactHistory: boolean = false;
+  @State uiSecretMask: boolean = false;
+  @State uiNotifications: boolean = true;
+  @State uiSplitWidth: number = 0;
   /** 输入坞实际高度（输入框长高时桌宠跟着上移）。 */
   @State dockHeight: number = 60;
   /** 设置面板的重绘版本号：@Builder 参数不会自己重算，改一次值就重建整块。 */
@@ -567,6 +571,9 @@ struct Index {
     this.uiPetEnabled = this.runtime.petEnabled;
     this.uiThemeTint = this.runtime.themeTint;
     this.uiCompactHistory = this.runtime.compactHistory;
+    this.uiSecretMask = this.runtime.secretMask;
+    this.uiNotifications = this.runtime.notificationsEnabled;
+    this.uiSplitWidth = this.runtime.splitWidth;
     this.restartPetAnimation();
     this.phase = this.runtime.phase;
     this.busy = this.runtime.busy;
@@ -2253,11 +2260,16 @@ struct Index {
       // 挂载顺序 = 层级顺序：越靠后越在上层。
       // 设置面板在下面，它打开的二级点选必须排在它之后，否则会被压在设置底下点不到。
       if (this.showSettings) {
-        // 用 ForEach 的 key 强制重建：@Builder 接收的「当前值」是调用时算好的，
-        // 不重建的话点一次只会改状态、界面还是旧值（就是要「点两次」）。
-        ForEach([this.settingsRev], (rev: number) => {
+        // 外层容器保持稳定：弹出动画挂在这里，只在这块第一次出现/消失时播。
+        // 里面的 ForEach 只负责「值变了就重建面板内容」，否则每点一行整块面板都会再弹一次。
+        Column() {
           this.SettingsOverlay()
-        }, (rev: number) => 'settings-' + rev)
+        }
+        .width('100%')
+        .height('100%')
+        .transition(TransitionEffect.translate({ y: 320 })
+          .combine(TransitionEffect.opacity(0))
+          .animation({ duration: 220, curve: Curve.Friction }))
       }
       if (this.showBrowser) {
         this.FileBrowserOverlay()
@@ -2636,6 +2648,9 @@ struct Index {
         .width('100%')
         .padding({ bottom: 6 })
         Scroll() {
+          Column() {
+          // 只重建「行」，不重建 Scroll 本身：否则每次点一行滚动位置都会被重置，看着像整块弹一下
+          ForEach([this.settingsRev], (rev: number) => {
           Column({ space: 16 }) {
             // —— 服务器 ——
             Column({ space: 8 }) {
@@ -2667,9 +2682,12 @@ struct Index {
                   this.settingsRev = this.settingsRev + 1;
                   this.runtime.setShowInspector(this.uiShowInspector);
                 })
-              if (this.runtime.splitWidth > 0) {
+              if (this.uiSplitWidth > 0) {
                 this.SettingsRow(this.tr('会话栏宽度'),
-                  this.runtime.splitWidth + 'vp', true, () => {
+                  this.uiSplitWidth + 'vp', true, () => {
+                    this.tapHaptic();
+                    this.uiSplitWidth = 0;
+                    this.settingsRev = this.settingsRev + 1;
                     this.runtime.setSplitWidth(0);
                     promptAction.showToast({ message: this.tr('已恢复默认宽度') });
                   })
@@ -2732,15 +2750,19 @@ struct Index {
               this.SettingsRow(this.tr('精简历史'),
                 this.uiCompactHistory ? this.tr('开 · 历史工具输出转摘要') : this.tr('关 · 传完整历史'),
                 false, () => {
+                  this.uiCompactHistory = !this.uiCompactHistory;
+                  this.settingsRev = this.settingsRev + 1;
                   this.runtime.setCompactHistory(!this.runtime.compactHistory).then(() => {
                     promptAction.showToast({ message: this.runtime.compactHistory
                       ? this.tr('已开启：下次打开会话生效') : this.tr('已关闭：下次打开会话生效') });
                   }).catch(() => undefined);
                 })
               this.SettingsRow(this.tr('敏感内容打码'),
-                this.runtime.secretMask ? this.tr('开 · 点气泡看原文') : this.tr('关 · 原文显示'),
+                this.uiSecretMask ? this.tr('开 · 点气泡看原文') : this.tr('关 · 原文显示'),
                 false, () => {
-                  this.runtime.setSecretMask(!this.runtime.secretMask);
+                  this.uiSecretMask = !this.uiSecretMask;
+                  this.settingsRev = this.settingsRev + 1;
+                  this.runtime.setSecretMask(this.uiSecretMask);
                 })
               this.SettingsRow(this.tr('连接诊断'),
                 this.connectedTransport.length > 0 ? this.transportBadgeText() : this.tr('未连接'), false, () => {
@@ -2760,8 +2782,10 @@ struct Index {
                   }).catch(() => undefined);
                 })
               this.SettingsRow(this.tr('完成通知'),
-                this.runtime.notificationsEnabled ? this.tr('开') : this.tr('关'), false, () => {
-                  const next: boolean = !this.runtime.notificationsEnabled;
+                this.uiNotifications ? this.tr('开') : this.tr('关'), false, () => {
+                  const next: boolean = !this.uiNotifications;
+                  this.uiNotifications = next;
+                  this.settingsRev = this.settingsRev + 1;
                   this.runtime.notificationsEnabled = next;
                   if (next) {
                     const ability: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
@@ -2833,6 +2857,9 @@ struct Index {
           }
           .width('100%')
           .padding({ bottom: 8 })
+          }, (rev: number) => 'settings-body-' + rev)
+          }
+          .width('100%')
         }
         .scrollable(ScrollDirection.Vertical)
         .scrollBar(BarState.Auto)
@@ -2847,9 +2874,6 @@ struct Index {
       .backgroundColor(this.pal().panel)
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
-      .transition(TransitionEffect.translate({ y: 320 })
-        .combine(TransitionEffect.opacity(0))
-        .animation({ duration: 220, curve: Curve.Friction }))
     }
     .width('100%')
     .height('100%')
@@ -2881,8 +2905,19 @@ struct Index {
     .borderRadius(12)
     .border({ width: 1, color: this.pal().border })
     .onClick(() => {
+      this.tapHaptic();
       action();
     })
+  }
+
+  /** 轻触反馈：设置行点按给一记很短的振动（拿不到振动器就安静跳过）。 */
+  private tapHaptic(): void {
+    try {
+      vibrator.startVibration({ type: 'time', duration: 12 },
+        { id: 0, usage: 'touch' }).catch(() => undefined);
+    } catch (error) {
+      logWarn('vibrate failed');
+    }
   }
 
   private currentServerSummary(): string {
@@ -7883,8 +7918,8 @@ struct Index {
           .backgroundColor(this.uiThemeTint === tint ? this.pal().inputBg : Color.Transparent)
           .borderRadius(12)
           .onClick(() => {
+            this.tapHaptic();
             this.uiThemeTint = tint;
-            this.settingsRev = this.settingsRev + 1;
             this.runtime.setThemeTint(tint);
           })
         }, (tint: number) => 'tint-' + tint)

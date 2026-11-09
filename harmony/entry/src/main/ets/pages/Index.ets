@@ -46,6 +46,10 @@ struct Index {
   @State uiPetEnabled: boolean = true;
   @State uiThemeTint: number = 0;
   @State uiCompactHistory: boolean = false;
+  /** 输入坞实际高度（输入框长高时桌宠跟着上移）。 */
+  @State dockHeight: number = 60;
+  /** 设置面板的重绘版本号：@Builder 参数不会自己重算，改一次值就重建整块。 */
+  @State settingsRev: number = 0;
   /** 桌宠精灵图当前帧 / 当前动画名（素材缺省时为空，界面回到 emoji）。 */
   @State petFrame: number = 0;
   @State petAnim: string = '';
@@ -1586,8 +1590,9 @@ struct Index {
             : this.tr('导出失败（存储不可用）') });
         }))
     }
-    // 别压在发送按钮上：抬到输入坞上方一档
-    .margin({ right: 14, bottom: 158 })
+    // 抬到输入坞上方；输入框长高时跟着上移（offset 不参与布局，位置更好控）
+    .margin({ right: 14 })
+    .offset({ x: 0, y: -(this.dockHeight + 10) })
     .hitTestBehavior(HitTestMode.Transparent)
     .width('100%')
     .height('100%')
@@ -2248,7 +2253,11 @@ struct Index {
       // 挂载顺序 = 层级顺序：越靠后越在上层。
       // 设置面板在下面，它打开的二级点选必须排在它之后，否则会被压在设置底下点不到。
       if (this.showSettings) {
-        this.SettingsOverlay()
+        // 用 ForEach 的 key 强制重建：@Builder 接收的「当前值」是调用时算好的，
+        // 不重建的话点一次只会改状态、界面还是旧值（就是要「点两次」）。
+        ForEach([this.settingsRev], (rev: number) => {
+          this.SettingsOverlay()
+        }, (rev: number) => 'settings-' + rev)
       }
       if (this.showBrowser) {
         this.FileBrowserOverlay()
@@ -2655,6 +2664,7 @@ struct Index {
               this.SettingsRow(this.tr('右侧详情栏'),
                 this.uiShowInspector ? this.tr('显示') : this.tr('隐藏'), false, () => {
                   this.uiShowInspector = !this.uiShowInspector;
+                  this.settingsRev = this.settingsRev + 1;
                   this.runtime.setShowInspector(this.uiShowInspector);
                 })
               if (this.runtime.splitWidth > 0) {
@@ -2698,6 +2708,7 @@ struct Index {
                 this.uiPetEnabled ? this.tr('开 · 干活/等确认/完成 四态') : this.tr('关'),
                 false, () => {
                   this.uiPetEnabled = !this.uiPetEnabled;
+                  this.settingsRev = this.settingsRev + 1;
                   this.runtime.setPetEnabled(this.uiPetEnabled);
                 })
               this.SettingsRow(this.tr('主题色'), this.themeTintLabel(), false, () => {
@@ -5238,6 +5249,12 @@ struct Index {
           }
         }
         .width('100%')
+        .onAreaChange((oldValue: Area, newValue: Area) => {
+          const height: number = Number(newValue.height);
+          if (height > 0 && Math.abs(height - this.dockHeight) > 0.5) {
+            this.dockHeight = height;
+          }
+        })
       }
       // 这一层不再画玻璃：底板交给按钮行的每一块自己画，中间才断得开
       .width('100%')
@@ -7867,6 +7884,7 @@ struct Index {
           .borderRadius(12)
           .onClick(() => {
             this.uiThemeTint = tint;
+            this.settingsRev = this.settingsRev + 1;
             this.runtime.setThemeTint(tint);
           })
         }, (tint: number) => 'tint-' + tint)

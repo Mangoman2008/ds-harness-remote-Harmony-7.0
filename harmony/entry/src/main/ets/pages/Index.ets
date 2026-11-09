@@ -15,6 +15,7 @@ import { applyTint, darkPalette, lightPalette, Palette } from '../services/Theme
 import { OAuthProvider, clientVersion as appVersion } from '../net/ServerApi';
 import { t, english, LANG_SYSTEM, LANG_ZH, LANG_EN } from '../services/I18n';
 import { logWarn } from '../util/Log';
+import { PetAnim, PetPack } from '../services/PetPack';
 import { LinkLog } from '../services/LinkLog';
 import {
   Breakpoint, FoldState, breakpointOf, contentColumnWidth, deviceColumns, foldStateOf,
@@ -29,6 +30,9 @@ import { image } from '@kit.ImageKit';
 import { util } from '@kit.ArkTS';
 import BuildProfile from 'BuildProfile';
 
+/** 桌宠精灵图放大倍数（像素风，整数倍最清晰）。 */
+const PET_SCALE: number = 1;
+
 @Entry
 @Component
 struct Index {
@@ -37,6 +41,11 @@ struct Index {
   private rtc: RtcBridge = new RtcBridge();
   private images: MarkdownImageCache = new MarkdownImageCache();
   @State imageVersion: number = 0;
+  /** 桌宠精灵图当前帧 / 当前动画名（素材缺省时为空，界面回到 emoji）。 */
+  @State petFrame: number = 0;
+  @State petAnim: string = '';
+  private petFrameCursor: number = 0;
+  private petTimer: number = -1;
   private scroller: Scroller = new Scroller();
   private fieldsPrefilled: boolean = false;
   private mainWindow: window.Window | undefined = undefined;
@@ -302,9 +311,14 @@ struct Index {
     this.maidTimer = setInterval(() => {
       this.maidBob = !this.maidBob;
     }, 2000);
+    // 桌宠精灵图：素材（dsh-go 的 whale-girl 包）只在本机存在，缺省时自动回退到 emoji
+    PetPack.load(getContext(this)).then(() => {
+      this.restartPetAnimation();
+    }).catch(() => undefined);
   }
 
   aboutToDisappear(): void {
+    this.stopPetAnimation();
     if (this.maidTimer >= 0) {
       clearInterval(this.maidTimer);
       this.maidTimer = -1;
@@ -540,6 +554,7 @@ struct Index {
   }
 
   private syncFromRuntime(): void {
+    this.restartPetAnimation();
     this.phase = this.runtime.phase;
     this.busy = this.runtime.busy;
     this.busyAction = this.runtime.busyAction;
@@ -1475,6 +1490,125 @@ struct Index {
     return '🌙';
   }
 
+  /** 停掉精灵图帧循环。 */
+  private stopPetAnimation(): void {
+    if (this.petTimer >= 0) {
+      clearTimeout(this.petTimer);
+      this.petTimer = -1;
+    }
+  }
+
+  /** 按当前桌宠状态切动画；同一段动画不重开。 */
+  private restartPetAnimation(): void {
+    if (!PetPack.ready()) {
+      return;
+    }
+    const next: string = PetPack.animNameFor(this.runtime.petState());
+    if (next.length === 0 || next === this.petAnim) {
+      return;
+    }
+    this.stopPetAnimation();
+    this.petAnim = next;
+    this.petFrameCursor = 0;
+    const tick = (): void => {
+      const anim: PetAnim | undefined = PetPack.anim(this.petAnim);
+      if (anim === undefined || anim.frames.length === 0) {
+        return;
+      }
+      const frame = anim.frames[this.petFrameCursor % anim.frames.length];
+      this.petFrame = frame.index;
+      this.petFrameCursor += 1;
+      this.petTimer = setTimeout(tick, Math.max(40, frame.ms));
+    };
+    tick();
+  }
+
+  /** 桌宠：有鲸娘素材就放精灵图，没有就退回 emoji。 */
+  @Builder
+  PetWidget() {
+    Stack({ alignContent: Alignment.BottomEnd }) {
+      Row({ space: 4 }) {
+          if (PetPack.ready() && this.petAnim.length > 0) {
+            this.PetSprite()
+          } else {
+            Text(this.petFace())
+              .fontSize(this.runtime.petState() === 'working' ? 22 : 20)
+              // 干活时轻微「呼吸」，待命时静止；用 iterations: -1 做无限往返，不额外开定时器
+              .scale(this.runtime.petState() === 'working' ? { x: 1.12, y: 1.12 } : { x: 1, y: 1 })
+              .animation({
+                duration: 1100,
+                curve: Curve.EaseInOut,
+                iterations: this.runtime.petState() === 'working' ? -1 : 1,
+                playMode: PlayMode.Alternate
+              })
+          }
+          if (this.petHint().length > 0) {
+            Text(this.petHint())
+              .fontSize(10)
+              .fontColor(this.pal().text3)
+          }
+        }
+        .padding({ left: 8, right: 10, top: 4, bottom: 4 })
+        .backgroundColor(this.pal().card)
+        .borderRadius(14)
+        .border({ width: 1, color: this.pal().border })
+        .margin({ bottom: 4 })
+        .onClick(() => {
+          promptAction.showToast({ message: this.petHint().length > 0
+            ? this.petHint() : this.tr('鲸娘在待命（设置里可关掉）') });
+        })
+        // 长按桌宠 = 导出诊断文件（现场排障的快捷键，不用翻抽屉找诊断面板）
+        .gesture(LongPressGesture().onAction(() => {
+          const path: string = this.runtime.exportDiagnosticsToFile();
+          promptAction.showToast({ message: path.length > 0
+            ? this.tr('诊断已导出，可 hdc file recv 拉走') + '\n' + path
+            : this.tr('导出失败（存储不可用）') });
+        }))
+    }
+    .margin({ right: 10, bottom: 92 })
+    .hitTestBehavior(HitTestMode.Transparent)
+    .width('100%')
+    .height('100%')
+  }
+
+  /** 把精灵图按帧裁出来显示：外层裁切 + 内层按帧横向偏移。 */
+  @Builder
+  PetSprite() {
+    Stack({ alignContent: Alignment.TopStart }) {
+      Image(this.petPixel())
+        .width(this.petSheetWidth())
+        .height(this.petFrameHeight())
+        // Fill：组件已经是「整张精灵图 × 放大倍数」，用 Fill 才能把 52×49 的像素图放大到 104×98
+        .objectFit(ImageFit.Fill)
+        .interpolation(ImageInterpolation.None)
+        .position({ x: -this.petFrame * this.petFrameWidth(), y: 0 })
+    }
+    .width(this.petFrameWidth())
+    .height(this.petFrameHeight())
+    .clip(true)
+  }
+
+  private petPixel(): image.PixelMap | undefined {
+    const anim: PetAnim | undefined = PetPack.anim(this.petAnim);
+    return anim === undefined ? undefined : anim.pixel;
+  }
+
+  private petFrameWidth(): number {
+    const anim: PetAnim | undefined = PetPack.anim(this.petAnim);
+    return anim === undefined ? 0 : anim.frameW * PET_SCALE;
+  }
+
+  private petFrameHeight(): number {
+    const anim: PetAnim | undefined = PetPack.anim(this.petAnim);
+    return anim === undefined ? 0 : anim.frameH * PET_SCALE;
+  }
+
+  /** 整张精灵图的显示宽度（按真实像素宽 × 缩放）。 */
+  private petSheetWidth(): number {
+    const anim: PetAnim | undefined = PetPack.anim(this.petAnim);
+    return anim === undefined ? 0 : anim.sheetW * PET_SCALE;
+  }
+
   private petHint(): string {
     const state: string = this.runtime.petState();
     if (state === 'working') {
@@ -2156,6 +2290,10 @@ struct Index {
       }
       if (this.choiceOpen) {
         this.ChoiceSheetOverlay()
+      }
+      // 桌宠浮层：钉在右下角，避开输入坞（嵌在会话列里会被输入框盖住）
+      if (this.runtime.petEnabled && this.phase === PHASE_CHAT) {
+        this.PetWidget()
       }
       if (this.previewActive) {
         this.ImagePreviewOverlay()
@@ -4444,42 +4582,6 @@ struct Index {
       .height('100%')
 
 
-      // 桌宠：右下角一只鲸娘，状态跟着干活/等你确认/刚做完走（素材用 emoji，零资源成本）
-      if (this.runtime.petEnabled) {
-        Row({ space: 4 }) {
-          Text(this.petFace())
-            .fontSize(this.runtime.petState() === 'working' ? 22 : 20)
-            // 干活时轻微「呼吸」，待命时静止；用 iterations: -1 做无限往返，不额外开定时器
-            .scale(this.runtime.petState() === 'working' ? { x: 1.12, y: 1.12 } : { x: 1, y: 1 })
-            .animation({
-              duration: 1100,
-              curve: Curve.EaseInOut,
-              iterations: this.runtime.petState() === 'working' ? -1 : 1,
-              playMode: PlayMode.Alternate
-            })
-          if (this.petHint().length > 0) {
-            Text(this.petHint())
-              .fontSize(10)
-              .fontColor(this.pal().text3)
-          }
-        }
-        .padding({ left: 8, right: 10, top: 4, bottom: 4 })
-        .backgroundColor(this.pal().card)
-        .borderRadius(14)
-        .border({ width: 1, color: this.pal().border })
-        .margin({ bottom: 4 })
-        .onClick(() => {
-          promptAction.showToast({ message: this.petHint().length > 0
-            ? this.petHint() : this.tr('鲸娘在待命（设置里可关掉）') });
-        })
-        // 长按桌宠 = 导出诊断文件（现场排障的快捷键，不用翻抽屉找诊断面板）
-        .gesture(LongPressGesture().onAction(() => {
-          const path: string = this.runtime.exportDiagnosticsToFile();
-          promptAction.showToast({ message: path.length > 0
-            ? this.tr('诊断已导出，可 hdc file recv 拉走') + '\n' + path
-            : this.tr('导出失败（存储不可用）') });
-        }))
-      }
       // 轮次导航：↑ 上一轮 / ↓ 下一轮 + 当前位置与上一轮用量（对齐 dsh-Go 的轮次导航）
       if (this.runtime.userTurnIndexes().length > 1) {
         Row({ space: 6 }) {

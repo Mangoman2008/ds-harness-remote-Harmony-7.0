@@ -2,6 +2,15 @@
 
 > 完整文件：本记录按版本倒序。历史版本（0.03 及更早）保留在文末，细节见 `docs/harmony-*.md`。
 
+## 0.17.119 – 0.17.124 — 2026-11-10
+
+- **桌宠换成 dsh-go 的鲸娘精灵图**（本机自用，素材不入库）：
+  - 新增 `services/PetPack.ets`：读 `pack.json`、按状态选动画、逐帧播放（idle / typing / thinking / happy）；
+  - 状态映射沿用原有四态：干活 → typing、等确认 → thinking、刚做完 → happy、待命 → idle；
+  - 桌宠改为右下角浮层（原来嵌在会话列里会被输入坞盖住）；
+  - **素材版权不在 AGPL 内**（归 DSH-TUI，保留所有权利），所以 `resources/rawfile/pets/` 已加进 `.gitignore`，
+    仓库里不含任何 PNG；素材缺失时自动退回原来的 emoji 桌宠。
+
 ## 0.17.118 — 2026-11-10
 
 - 预览拖动增益上限 3× → **4×**（`PREVIEW_PAN_MAX_GAIN`），高倍下想再快一档。

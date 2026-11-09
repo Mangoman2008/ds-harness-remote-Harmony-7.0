@@ -1608,12 +1608,17 @@ struct Index {
         .margin({ bottom: 4 })
         .scale({ x: this.petBoom, y: this.petBoom })
         .zIndex(this.petBooming ? 60 : 1)
-        .onClick(() => {
-          this.sayPetQuip();
-        })
-        .gesture(TapGesture({ count: 2 }).onAction(() => {
-          this.playPetBoom();
-        }))
+        // 双击优先：onClick 会和 TapGesture(count:2) 抢事件，双击永远轮不到
+        .gesture(
+          GestureGroup(GestureMode.Exclusive,
+            TapGesture({ count: 2 }).onAction(() => {
+              this.playPetBoom();
+            }),
+            TapGesture({ count: 1 }).onAction(() => {
+              this.sayPetQuip();
+            })
+          )
+        )
         // 长按桌宠 = 导出诊断文件（现场排障的快捷键，不用翻抽屉找诊断面板）
         .gesture(LongPressGesture().onAction(() => {
           const path: string = this.runtime.exportDiagnosticsToFile();

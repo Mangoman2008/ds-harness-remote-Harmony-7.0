@@ -36,6 +36,8 @@ const KEY_THEME_TINT = 'dshremote.themeTint.v1';
 const KEY_PET = 'dshremote.pet.v1';
 /** 已发送文本里的 Key/Token 默认打码。 */
 const KEY_SECRET_MASK = 'dshremote.secretMask.v1';
+/** 会话壁纸（压缩后的 JPEG base64；不是秘密，只存本地）。 */
+const KEY_WALLPAPER = 'dshremote.wallpaper.v1';
 /** 多服务器/多账号：一份「已登录过的服务器」快照列表（含 token），存在 asset store 里。 */
 const ASSET_ALIAS_PROFILES = 'dshremote.profiles';
 
@@ -914,6 +916,22 @@ export class SecureStore {
   loadSecretMask(): boolean {
     // 默认开：宁可多遮，用户点一下就能看
     return this.getSync(KEY_SECRET_MASK, '1') === '1';
+  }
+
+  loadWallpaper(): string {
+    return this.getSync(KEY_WALLPAPER, '');
+  }
+
+  saveWallpaper(base64: string): void {
+    try {
+      if (base64.length === 0) {
+        this.deleteSyncKey(KEY_WALLPAPER);
+      } else {
+        this.putSync(KEY_WALLPAPER, base64);
+      }
+    } catch (error) {
+      logWarn('wallpaper save failed');
+    }
   }
 
   saveSecretMask(enabled: boolean): void {

@@ -553,6 +553,7 @@ export class AppRuntime {
       this.showInspector = this.store.loadShowInspector();
       this.compactHistory = this.store.loadCompactHistory();
       this.secretMask = this.store.loadSecretMask();
+    this.wallpaper = this.store.loadWallpaper();
       this.profiles = this.store.loadProfiles();
       this.drafts = this.store.loadDrafts();
       this.prompts = this.store.loadPrompts();
@@ -4118,6 +4119,15 @@ export class AppRuntime {
   }
 
   /** 开关「敏感内容打码」。 */
+  /** 会话壁纸：压缩后的 JPEG base64，空串表示不使用。 */
+  wallpaper: string = '';
+
+  setWallpaper(base64: string): void {
+    this.wallpaper = base64;
+    this.store.saveWallpaper(base64);
+    this.notify();
+  }
+
   setSecretMask(enabled: boolean): void {
     this.secretMask = enabled;
     this.store.saveSecretMask(enabled);

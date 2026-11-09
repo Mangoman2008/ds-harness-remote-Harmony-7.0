@@ -50,6 +50,8 @@ struct Index {
   @State uiSecretMask: boolean = false;
   @State uiNotifications: boolean = true;
   @State uiSplitWidth: number = 0;
+  /** 会话壁纸（压缩后的 JPEG base64）。 */
+  @State wallpaper: string = '';
   /** 输入坞实际高度（输入框长高时桌宠跟着上移）。 */
   @State dockHeight: number = 60;
   /** 设置面板的重绘版本号：@Builder 参数不会自己重算，改一次值就重建整块。 */
@@ -574,6 +576,7 @@ struct Index {
     this.uiSecretMask = this.runtime.secretMask;
     this.uiNotifications = this.runtime.notificationsEnabled;
     this.uiSplitWidth = this.runtime.splitWidth;
+    this.wallpaper = this.runtime.wallpaper;
     this.restartPetAnimation();
     this.phase = this.runtime.phase;
     this.busy = this.runtime.busy;
@@ -2143,6 +2146,24 @@ struct Index {
       .position({ x: 0, y: -this.topSafePadding() })
       .width('100%')
       .hitTestBehavior(HitTestMode.None)
+      // 会话壁纸：默认虚化 + 压一层半透明底色，避免抢文字焦点
+      if (this.wallpaper.length > 0 && this.phase === PHASE_CHAT) {
+        Stack() {
+          Image(imageDataUri(this.wallpaper))
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Cover)
+            .blur(24)
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(this.isDarkUi ? 'rgba(10,14,24,0.78)' : 'rgba(247,250,255,0.82)')
+        }
+        .height(this.windowHeightVp > 0 ? this.windowHeightVp : 800)
+        .position({ x: 0, y: -this.topSafePadding() })
+        .width('100%')
+        .hitTestBehavior(HitTestMode.None)
+      }
       Column() {
         if (this.phase === PHASE_BOOT) {
           this.BootScreen()
@@ -2259,6 +2280,10 @@ struct Index {
       }
       // 挂载顺序 = 层级顺序：越靠后越在上层。
       // 设置面板在下面，它打开的二级点选必须排在它之后，否则会被压在设置底下点不到。
+      // 桌宠浮层：钉在右下角，避开输入坞（嵌在会话列里会被输入框盖住）
+      if (this.uiPetEnabled && this.phase === PHASE_CHAT && this.petOverlayAllowed()) {
+        this.PetWidget()
+      }
       if (this.showSettings) {
         // 外层容器保持稳定：弹出动画挂在这里，只在这块第一次出现/消失时播。
         // 里面的 ForEach 只负责「值变了就重建面板内容」，否则每点一行整块面板都会再弹一次。
@@ -2333,10 +2358,6 @@ struct Index {
       }
       if (this.choiceOpen) {
         this.ChoiceSheetOverlay()
-      }
-      // 桌宠浮层：钉在右下角，避开输入坞（嵌在会话列里会被输入框盖住）
-      if (this.uiPetEnabled && this.phase === PHASE_CHAT && this.petOverlayAllowed()) {
-        this.PetWidget()
       }
       if (this.previewActive) {
         this.ImagePreviewOverlay()
@@ -2747,6 +2768,32 @@ struct Index {
                   }
                 });
               })
+              this.SettingsRow(this.tr('会话壁纸'),
+                this.wallpaper.length > 0 ? this.tr('已设置 · 虚化') : this.tr('无'), false, () => {
+                  this.tapHaptic();
+                  AlertDialog.show({
+                    title: this.tr('会话壁纸'),
+                    message: this.tr('壁纸会做虚化与压暗处理，避免抢走文字焦点。'),
+                    autoCancel: true,
+                    primaryButton: {
+                      value: this.tr('选择图片'),
+                      action: () => {
+                        this.pickWallpaper();
+                      }
+                    },
+                    secondaryButton: {
+                      value: this.wallpaper.length > 0 ? this.tr('移除') : this.tr('取消'),
+                      fontColor: this.wallpaper.length > 0 ? '#F85749' : undefined,
+                      action: () => {
+                        if (this.wallpaper.length > 0) {
+                          this.wallpaper = '';
+                          this.settingsRev = this.settingsRev + 1;
+                          this.runtime.setWallpaper('');
+                        }
+                      }
+                    }
+                  });
+                })
               this.SettingsRow(this.tr('精简历史'),
                 this.uiCompactHistory ? this.tr('开 · 历史工具输出转摘要') : this.tr('关 · 传完整历史'),
                 false, () => {
@@ -2908,6 +2955,41 @@ struct Index {
       this.tapHaptic();
       action();
     })
+  }
+
+  /** 选一张壁纸：压到长边 720、JPEG q70 再存（虚化后不需要高清）。 */
+  private async pickWallpaper(): Promise<void> {
+    try {
+      const picked: PickedImage[] = await pickImages(1);
+      if (picked.length === 0) {
+        return;
+      }
+      let base64: string = picked[0].base64;
+      try {
+        const bytes: Uint8Array = new util.Base64Helper().decodeSync(base64);
+        const source: image.ImageSource = image.createImageSource(bytes.buffer as ArrayBuffer);
+        const info: image.ImageInfo = await source.getImageInfo();
+        const longest: number = Math.max(info.size.width, info.size.height);
+        const scale: number = longest > 720 ? 720 / longest : 1;
+        const pixel: image.PixelMap = await source.createPixelMap({
+          desiredSize: {
+            width: Math.max(1, Math.round(info.size.width * scale)),
+            height: Math.max(1, Math.round(info.size.height * scale))
+          }
+        });
+        const packer: image.ImagePacker = image.createImagePacker();
+        const encoded: ArrayBuffer = await packer.packing(pixel, { format: 'image/jpeg', quality: 70 });
+        base64 = new util.Base64Helper().encodeToStringSync(new Uint8Array(encoded));
+      } catch (error) {
+        logWarn('wallpaper compress failed, keep original');
+      }
+      this.wallpaper = base64;
+      this.settingsRev = this.settingsRev + 1;
+      this.runtime.setWallpaper(base64);
+      promptAction.showToast({ message: this.tr('壁纸已更新') });
+    } catch (error) {
+      logWarn('wallpaper pick failed: ' + errorMessage(error));
+    }
   }
 
   /** 轻触反馈：设置行点按给一记很短的振动（拿不到振动器就安静跳过）。 */

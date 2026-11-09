@@ -130,10 +130,12 @@ pnpm exec vitest run harmony/tests
 设备上没有 `screenrecord`，本机也没有可执行的 ffmpeg，所以演示用「关键界面截图 + 字幕」的方式提供，
 文件在仓库外的本地目录（按仓库规矩，验收录屏不进仓库）：
 
-- `~/WorkBuddy/artifacts/harmony-demo/demo.gif`（本地，不在仓库里）：连接/会话列表 → 历史图片显示 → 装机版本核对
+- `~/WorkBuddy/artifacts/harmony-demo/demo.gif`（本地，不在仓库里）：连接/会话列表 → 历史图片显示 →
+  文件附件卡片 → 装机版本核对
 - 想现场复现：把手机连上后跑 `harmony/scripts/smoke.sh`，然后进任一含图片的会话看历史回显即可
 
-演示只放已实测过的画面；文件附件卡片（HEIC 这类主机不收的格式）目前只有代码与单测依据，等真机截图补上再放进来。
+四张都是真机截图。文件附件卡片已实测：手机端把 20:28 那条
+`IMG_20260313_005018.heic` 渲染成 `📎 IMG_20260313_005018.heic · 6.6 MB` 的卡片，不再整条消失。
 
 1. **历史图片**：从电脑端发进会话的图片，鸿蒙端会走 `session/attachment` 补齐渲染
    （0.2.2 起必须带完整 `ImageAttachmentRef`，见 0.17.101）；

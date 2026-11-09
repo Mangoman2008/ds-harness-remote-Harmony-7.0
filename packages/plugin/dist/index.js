@@ -84375,7 +84375,7 @@ var HostServerApi = class {
       throw error62;
     }
   }
-  async rotateCredentials(identity3, stored) {
+  async rotateCredentials(identity3, stored, allowRecoveredRotation = true) {
     let tokens;
     try {
       tokens = await this.publicRequest("/api/v1/auth/refresh", {
@@ -84384,20 +84384,34 @@ var HostServerApi = class {
       });
     } catch (error62) {
       if (error62 instanceof ServerApiError) {
-        if (error62.code === "AUTH_INVALID") {
+        if (error62.code === "AUTH_INVALID" || error62.code === "TOKEN_EXPIRED") {
           const latest = await this.store.load(this.baseUrl, identity3.deviceId);
-          if (latest !== void 0 && latest.refreshToken !== stored.refreshToken && latest.refreshTokenExpiresAt > Date.now() && latest.accessTokenExpiresAt > Date.now() + 3e4) {
-            return latest;
+          if (latest !== void 0 && latest.refreshToken !== stored.refreshToken && latest.refreshTokenExpiresAt > Date.now()) {
+            if (latest.accessTokenExpiresAt > Date.now() + 3e4) return latest;
+            if (allowRecoveredRotation) return this.rotateCredentials(identity3, latest, false);
           }
         }
         throw new ServerApiError(error62.code, error62.message, error62.retryable, error62.status, "credential_refresh", error62.reason);
       }
       throw error62;
     }
-    return this.store.save({
+    const saved = await this.store.save({
       ...stored,
       ...validateTokens(tokens)
     });
+    if (allowRecoveredRotation && saved.accessTokenExpiresAt <= Date.now() + 3e4 && saved.refreshToken !== stored.refreshToken && saved.refreshTokenExpiresAt > Date.now()) {
+      return this.rotateCredentials(identity3, saved, false);
+    }
+    if (saved.accessTokenExpiresAt <= Date.now()) {
+      throw new ServerApiError(
+        "CONNECTION_FAILED",
+        "The Server returned an already-expired access token.",
+        true,
+        200,
+        "credential_refresh"
+      );
+    }
+    return saved;
   }
   async listDevices(signal) {
     const devices = [];
@@ -84495,7 +84509,7 @@ var HostServerApi = class {
     try {
       return await this.publicRequest(path, init, credentials.accessToken);
     } catch (error62) {
-      if (this.role !== "client" || this.identity?.deviceId !== credentials.deviceId || (init.method ?? "GET") !== "GET" || !(error62 instanceof ServerApiError) || error62.status !== 401 || error62.code !== "AUTH_INVALID" && error62.code !== "TOKEN_EXPIRED") throw error62;
+      if (this.identity?.deviceId !== credentials.deviceId || (init.method ?? "GET") !== "GET" || !(error62 instanceof ServerApiError) || error62.status !== 401 || error62.code !== "AUTH_INVALID" && error62.code !== "TOKEN_EXPIRED") throw error62;
       init.signal?.throwIfAborted();
       const next = await this.refreshCredentials(credentials.accessToken);
       if (next.account !== credentials.account || this.identity?.deviceId !== credentials.deviceId) throw error62;
@@ -86429,7 +86443,13 @@ var ClientModeRuntime = class {
         if (this.host.hasStoredAuthorization !== void 0 && await this.host.hasStoredAuthorization()) return;
       }
       const credentials = await this.server.authenticate(this.requireIdentity());
-      await this.host.authorizeHostAsOwned(credentials.accessToken, credentials.account);
+      try {
+        await this.host.authorizeHostAsOwned(credentials.accessToken, credentials.account);
+      } catch (error62) {
+        if (!(error62 instanceof ServerApiError) || error62.status !== 401 || error62.code !== "AUTH_INVALID" && error62.code !== "TOKEN_EXPIRED") throw error62;
+        const refreshed = await this.server.refreshCredentials(credentials.accessToken);
+        await this.host.authorizeHostAsOwned(refreshed.accessToken, refreshed.account);
+      }
     } catch (error62) {
       this.logger.warn("automatic Host authorization failed", { code: safeErrorCode(error62) });
     }
@@ -86603,7 +86623,13 @@ var ClientModeRuntime = class {
       return this.status();
     }
     const credentials = await this.server.authenticate(this.requireIdentity());
-    await this.host.authorizeHostAsOwned(credentials.accessToken, credentials.account);
+    try {
+      await this.host.authorizeHostAsOwned(credentials.accessToken, credentials.account);
+    } catch (error62) {
+      if (!(error62 instanceof ServerApiError) || error62.status !== 401 || error62.code !== "AUTH_INVALID" && error62.code !== "TOKEN_EXPIRED") throw error62;
+      const refreshed = await this.server.refreshCredentials(credentials.accessToken);
+      await this.host.authorizeHostAsOwned(refreshed.accessToken, refreshed.account);
+    }
     return this.status();
   }
   async setMode(mode2, targetDeviceId, signal) {
@@ -87546,7 +87572,7 @@ async function assertOwnedRemoteStorage(root2) {
   const checkIdentity = async (directory, scope2, role2) => {
     const entries = (await readdir(directory, { withFileTypes: true })).filter((entry) => !(directory === root2 && entry.name === "servers" && entry.isDirectory()));
     for (const entry of entries) {
-      const allowedFile = identityFiles.has(entry.name) || role2 === "client" && isIdentityTempArtifact(entry.name);
+      const allowedFile = identityFiles.has(entry.name) || isPeerTempArtifact(entry.name) || role2 === "client" && isIdentityTempArtifact(entry.name);
       if (!entry.isFile() || !allowedFile) throw rejected("STORAGE_CONFLICT");
       const metadata = await lstat(join5(directory, entry.name));
       if (!metadata.isFile() || metadata.isSymbolicLink() || metadata.nlink !== 1 || metadata.size > 16 * 1024 * 1024) {
@@ -87612,7 +87638,7 @@ async function assertOwnedRemoteStorage(root2) {
     const entries = await readdir(root2, { withFileTypes: true });
     const flat = entries.filter((entry) => entry.name !== "servers");
     if (flat.length > 0) {
-      if (flat.some((entry) => !entry.isFile() || !identityFiles.has(entry.name))) throw rejected("STORAGE_CONFLICT");
+      if (flat.some((entry) => !entry.isFile() || !identityFiles.has(entry.name) && !isPeerTempArtifact(entry.name))) throw rejected("STORAGE_CONFLICT");
       await checkIdentity(root2);
     }
     const servers = entries.find((entry) => entry.name === "servers");
@@ -87835,6 +87861,9 @@ async function removeIdentityRecords(directory) {
 function isLockArtifact(name2) {
   return name2 === LOCK_FILE_NAME || name2.startsWith(`${LOCK_FILE_NAME}.takeover-`);
 }
+function isPeerTempArtifact(name2) {
+  return /^trusted-peers\.json\.[1-9]\d*\.[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.tmp$/.test(name2);
+}
 function isIdentityTempArtifact(name2) {
   return (name2.startsWith("device.json.") || name2.startsWith("device.key.")) && name2.endsWith(".tmp");
 }
@@ -87849,7 +87878,7 @@ async function removeStaleTemporaries(directory) {
   } catch {
     return;
   }
-  await Promise.all(entries.filter((name2) => isIdentityTempArtifact(name2)).map((name2) => unlink(join5(directory, name2)).catch(() => void 0)));
+  await Promise.all(entries.filter((name2) => isIdentityTempArtifact(name2) || isPeerTempArtifact(name2)).map((name2) => unlink(join5(directory, name2)).catch(() => void 0)));
 }
 
 // packages/plugin/src/control-stream.ts
@@ -97698,6 +97727,7 @@ var HostServerConnection = class {
       this.start();
       return;
     }
+    this.retryWake?.();
     if (this.resumeQueued) return;
     this.resumeQueued = true;
     void this.running.finally(() => {
@@ -97813,6 +97843,7 @@ var HostServerConnection = class {
     let acknowledged = false;
     let retainOnClose = false;
     let invalidControl = false;
+    let socketError;
     let messageQueue = Promise.resolve();
     await new Promise((resolve9, reject) => {
       let settled = false;
@@ -97856,7 +97887,7 @@ var HostServerConnection = class {
         }
         const preserve = this.config.reconnect.enabled && !this.stopped && !this.reconnectRequested && (error62 === void 0 ? retainOnClose : isRetryable(error62)) && !invalidControl && !TERMINAL_AUTH_ERRORS.has(this.terminalError ?? "") && [...this.tunnels.values()].some((tunnel) => tunnel.lease?.canDetach());
         const cleanup = preserve ? Promise.all([...this.tunnels.values()].filter((tunnel) => !tunnel.lease?.canDetach()).map((tunnel) => this.dropTunnel(tunnel.connectionId))) : this.dropTunnels();
-        void cleanup.finally(() => error62 === void 0 ? resolve9() : reject(error62));
+        void cleanup.catch(() => void 0).finally(() => error62 === void 0 ? resolve9() : reject(error62));
       };
       let forceDrainWake;
       const handleClose = (event, forced = false) => {
@@ -97890,8 +97921,16 @@ var HostServerConnection = class {
             finish();
             return;
           }
-          if (event.code === 4003) {
+          if (event.code === 4003 || event.reason === "CONNECTION_REPLACED" || socketError === "CONNECTION_REPLACED") {
             finish(new ControlConnectionError("CONNECTION_REPLACED", "Another instance connected with this Host identity."));
+            return;
+          }
+          if (event.code === 4004 || event.reason === "DEVICE_REVOKED" || socketError === "DEVICE_REVOKED" || this.terminalError === "DEVICE_REVOKED") {
+            finish(new ControlConnectionError("DEVICE_REVOKED", "The Server revoked this Host device."));
+            return;
+          }
+          if (event.code === 4011 || event.reason === "UNSUPPORTED_VERSION" || socketError === "UNSUPPORTED_VERSION" || this.terminalError === "UNSUPPORTED_VERSION") {
+            finish(new ControlConnectionError("UNSUPPORTED_VERSION", "The Server does not support the Remote protocol version."));
             return;
           }
           if (!acknowledged && recoveryTickets.length && ([4008, 4012].includes(event.code) || event.code === 4002 && event.reason === "recovery authorization rejected")) {
@@ -97900,11 +97939,13 @@ var HostServerConnection = class {
             finish(new ControlConnectionError("CREDENTIALS_REFRESHED", "Retry control without recovery state."));
             return;
           }
-          if (event.code === 4002) {
+          const isAuthRejection = event.code === 4002 || socketError === "AUTH_INVALID" || socketError === "TOKEN_EXPIRED" || event.code === 4001 && (event.reason === "AUTH_INVALID" || event.reason === "TOKEN_EXPIRED");
+          if (isAuthRejection) {
             if (this.authRecoveryAttempted) {
               finish(new ControlConnectionError("AUTH_INVALID", "Server rejected refreshed credentials."));
               return;
             }
+            this.terminalError = void 0;
             try {
               await Promise.race([
                 this.api.refreshCredentials(credentials.accessToken),
@@ -97930,19 +97971,13 @@ var HostServerConnection = class {
             }
             if (settled) return;
             this.authRecoveryAttempted = true;
+            this.terminalError = void 0;
             finish(new ControlConnectionError("CREDENTIALS_REFRESHED", "Retry hello with refreshed credentials."));
             return;
           }
-          if (event.code === 4004 || this.terminalError === "DEVICE_REVOKED") {
-            finish(new ControlConnectionError("DEVICE_REVOKED", "The Server revoked this Host device."));
-            return;
-          }
-          if (event.code === 4011 || this.terminalError === "UNSUPPORTED_VERSION") {
-            finish(new ControlConnectionError("UNSUPPORTED_VERSION", "The Server does not support the Remote protocol version."));
-            return;
-          }
-          if (acknowledged && this.terminalError === void 0) this.terminalError = closeCode(event.code);
-          finish(acknowledged ? void 0 : new ControlConnectionError(closeCode(event.code), event.reason || "Server control connection closed."));
+          const finalCode = socketError ?? closeCode(event.code);
+          if (acknowledged && this.terminalError === void 0) this.terminalError = finalCode;
+          finish(acknowledged ? void 0 : new ControlConnectionError(finalCode, event.reason || "Server control connection closed."));
         };
         void close();
       };
@@ -98002,7 +98037,10 @@ var HostServerConnection = class {
           if (preview.type === "error") {
             const payload = requireControlError(preview.payload);
             if (payload.code === "DEVICE_REVOKED" || payload.connectionId === void 0) {
-              this.terminalError = payload.code;
+              socketError = payload.code;
+              if (payload.code !== "AUTH_INVALID" && payload.code !== "TOKEN_EXPIRED") {
+                this.terminalError = payload.code;
+              }
             }
           }
         } catch {
@@ -98049,8 +98087,11 @@ var HostServerConnection = class {
             for (const tunnel of this.tunnels.values()) tunnel.lease?.tick(true);
             return;
           }
-          if (!acknowledged) throw new ControlConnectionError("INVALID_MESSAGE", "Server sent a frame before hello.ack.");
+          if (!acknowledged && (frame.type !== "error" || requireControlError(frame.payload).connectionId !== void 0)) {
+            throw new ControlConnectionError("INVALID_MESSAGE", "Server sent a frame before hello.ack.");
+          }
           await this.handleFrame(frame);
+          if (!acknowledged && !closing) closeSocket(4001, socketError ?? "hello rejected");
         }).catch((error62) => {
           if (settled || this.socket !== socket) return;
           invalidControl = true;
@@ -98135,6 +98176,20 @@ var HostServerConnection = class {
         };
         if (payload.retryable) this.logger.info("server closed a remote connection", fields);
         else this.logger.warn("server closed a remote connection", fields);
+      } else if (payload.code === "AUTH_INVALID" || payload.code === "TOKEN_EXPIRED") {
+        this.logger.warn("server returned a control error", { code: payload.code, retryable: payload.retryable });
+        if (this.forceCloseSocket) this.forceCloseSocket(4002, payload.code);
+        else this.socket?.close(4002, payload.code);
+      } else if (payload.code === "UNSUPPORTED_VERSION") {
+        this.terminalError = payload.code;
+        this.logger.warn("server returned a control error", { code: payload.code, retryable: payload.retryable });
+        if (this.forceCloseSocket) this.forceCloseSocket(4011, "unsupported version");
+        else this.socket?.close(4011, "unsupported version");
+      } else if (payload.code === "CONNECTION_REPLACED") {
+        this.terminalError = payload.code;
+        this.logger.warn("server returned a control error", { code: payload.code, retryable: payload.retryable });
+        if (this.forceCloseSocket) this.forceCloseSocket(4003, "connection replaced");
+        else this.socket?.close(4003, "connection replaced");
       } else {
         this.terminalError = payload.code;
         this.logger.warn("server returned a control error", { code: payload.code, retryable: payload.retryable });
@@ -101032,6 +101087,31 @@ var PluginUpdateChecker = class {
   }
 };
 
+// packages/plugin/src/tui-event-source.ts
+async function assertRemoteEventSource(gateway) {
+  const peerGateway = gateway.createPeer?.();
+  if (peerGateway?.peer === void 0) {
+    await peerGateway?.dispose?.();
+    throw new Error("dsh-TUI Remote requires an official owner Peer for Remote events.");
+  }
+  const signal = AbortSignal.timeout(5e3);
+  let iterator;
+  try {
+    const source = await peerGateway.open("$events", { args: {} }, signal);
+    iterator = source[Symbol.asyncIterator]();
+    const first2 = await iterator.next();
+    const value = first2.value;
+    if (first2.done || typeof value !== "object" || value === null || !("type" in value) || value.type !== "ready") {
+      throw new Error("The Host Remote event source did not send a ready frame.");
+    }
+  } catch {
+    throw new Error("dsh-TUI Remote needs @deepseek-ai/dsh-api-remotes and its Host API packages.");
+  } finally {
+    await iterator?.return?.().catch(() => void 0);
+    await peerGateway.dispose?.();
+  }
+}
+
 // packages/plugin/src/owner-peer.ts
 function ownerPeerConstructor(connectionExports) {
   const candidate = typeof connectionExports.Peer === "function" ? connectionExports.Peer : connectionExports.OperatorPeer;
@@ -101523,7 +101603,18 @@ function apply(ctx, entry = void 0) {
   };
   ctx.inject(["settings", "connection", "typertGateway"], activateWhenCarrierReady);
 }
-async function activate(ctx, readConfig, entryId) {
+function applyTuiHost(ctx, entry) {
+  const readConfig = () => readEntryConfig(entry);
+  const entryId = locateEntryId(ctx);
+  ctx.inject(["settings", "typertGateway"], async (runtimeContext) => {
+    const gateway = runtimeContext.get("typertGateway");
+    if (!new TypertGatewaySwitch(gateway).supportsCarrier()) {
+      throw new Error("dsh-TUI Remote requires the official Typert Gateway carrier.");
+    }
+    await activate(runtimeContext, readConfig, entryId, true);
+  });
+}
+async function activate(ctx, readConfig, entryId, requireRemoteEvents = false) {
   const settings = ctx.get("settings");
   const settingsBinding = await createSettingsBinding(ctx, settings, readConfig, entryId);
   const connection = ctx.get("connection");
@@ -101601,6 +101692,7 @@ async function activate(ctx, readConfig, entryId) {
       }
     };
   };
+  if (requireRemoteEvents) await assertRemoteEventSource(localTypertGateway);
   const subprocess = ctx.get("subprocess", false);
   const schedule = ctx.get("schedule", false) ?? (ctx.root === void 0 ? void 0 : ctx.root.get("schedule", false));
   const createRuntimes = (config3) => {
@@ -101874,6 +101966,7 @@ export {
   ServerCredentialsInvalidError,
   TypertGatewaySwitch,
   apply,
+  applyTuiHost,
   createRemoteFileContentProvider,
   fingerprint2 as fingerprint,
   name,

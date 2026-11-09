@@ -52,6 +52,12 @@ struct Index {
   @State uiSplitWidth: number = 0;
   /** 会话壁纸（压缩后的 JPEG base64）。 */
   @State wallpaper: string = '';
+  /** 桌宠冒出来的俏皮话（2.6 秒后自动消失）。 */
+  @State petQuip: string = '';
+  /** 双击桌宠时的「炸屏」缩放倍数。 */
+  @State petBoom: number = 1;
+  private petQuipTimer: number = -1;
+  private petBooming: boolean = false;
   /** 输入坞实际高度（输入框长高时桌宠跟着上移）。 */
   @State dockHeight: number = 60;
   /** 设置面板的重绘版本号：@Builder 参数不会自己重算，改一次值就重建整块。 */
@@ -1562,6 +1568,18 @@ struct Index {
   @Builder
   PetWidget() {
     Stack({ alignContent: Alignment.BottomEnd }) {
+      Column({ space: 4 }) {
+        if (this.petQuip.length > 0) {
+          Text(this.petQuip)
+            .fontSize(this.fs(11))
+            .fontColor(this.pal().text)
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .backgroundColor(this.pal().panel)
+            .borderRadius(12)
+            .border({ width: 1, color: this.pal().border })
+            .shadow({ radius: 10, color: 'rgba(0,0,0,0.12)', offsetX: 0, offsetY: 3 })
+            .margin({ right: 6 })
+        }
       Row({ space: 4 }) {
           if (PetPack.ready() && this.petAnim.length > 0) {
             this.PetSprite()
@@ -1588,10 +1606,14 @@ struct Index {
         .borderRadius(14)
         .border({ width: 1, color: this.pal().border })
         .margin({ bottom: 4 })
+        .scale({ x: this.petBoom, y: this.petBoom })
+        .zIndex(this.petBooming ? 60 : 1)
         .onClick(() => {
-          promptAction.showToast({ message: this.petHint().length > 0
-            ? this.petHint() : this.tr('鲸娘在待命（设置里可关掉）') });
+          this.sayPetQuip();
         })
+        .gesture(TapGesture({ count: 2 }).onAction(() => {
+          this.playPetBoom();
+        }))
         // 长按桌宠 = 导出诊断文件（现场排障的快捷键，不用翻抽屉找诊断面板）
         .gesture(LongPressGesture().onAction(() => {
           const path: string = this.runtime.exportDiagnosticsToFile();
@@ -1599,6 +1621,8 @@ struct Index {
             ? this.tr('诊断已导出，可 hdc file recv 拉走') + '\n' + path
             : this.tr('导出失败（存储不可用）') });
         }))
+      }
+      .alignItems(HorizontalAlign.End)
     }
     // 抬到输入坞上方；输入框长高时跟着上移（offset 不参与布局，位置更好控）
     .margin({ right: 14 })
@@ -2768,32 +2792,6 @@ struct Index {
                   }
                 });
               })
-              this.SettingsRow(this.tr('会话壁纸'),
-                this.wallpaper.length > 0 ? this.tr('已设置 · 虚化') : this.tr('无'), false, () => {
-                  this.tapHaptic();
-                  AlertDialog.show({
-                    title: this.tr('会话壁纸'),
-                    message: this.tr('壁纸会做虚化与压暗处理，避免抢走文字焦点。'),
-                    autoCancel: true,
-                    primaryButton: {
-                      value: this.tr('选择图片'),
-                      action: () => {
-                        this.pickWallpaper();
-                      }
-                    },
-                    secondaryButton: {
-                      value: this.wallpaper.length > 0 ? this.tr('移除') : this.tr('取消'),
-                      fontColor: this.wallpaper.length > 0 ? '#F85749' : undefined,
-                      action: () => {
-                        if (this.wallpaper.length > 0) {
-                          this.wallpaper = '';
-                          this.settingsRev = this.settingsRev + 1;
-                          this.runtime.setWallpaper('');
-                        }
-                      }
-                    }
-                  });
-                })
               this.SettingsRow(this.tr('精简历史'),
                 this.uiCompactHistory ? this.tr('开 · 历史工具输出转摘要') : this.tr('关 · 传完整历史'),
                 false, () => {
@@ -2958,7 +2956,7 @@ struct Index {
   }
 
   /** 选一张壁纸：压到长边 720、JPEG q70 再存（虚化后不需要高清）。 */
-  private async pickWallpaper(): Promise<void> {
+  private async openWallpaperPicker(): Promise<void> {
     try {
       const picked: PickedImage[] = await pickImages(1);
       if (picked.length === 0) {
@@ -2990,6 +2988,51 @@ struct Index {
     } catch (error) {
       logWarn('wallpaper pick failed: ' + errorMessage(error));
     }
+  }
+
+  /** 点一下桌宠：按当前状态随机说一句俏皮话。 */
+  private sayPetQuip(): void {
+    const state: string = this.runtime.petState();
+    const pool: string[] = state === 'working'
+      ? ['别催别催，正在想…', '键盘都要冒烟了', '这活儿有点难，等我捋捋', '先把思路理顺再动手',
+        '正在搬砖，勿扰', '再等等，快好了']
+      : (state === 'waiting'
+        ? ['有个事得你点个头', '你倒是看看我举的手', '卡在这儿了，需要你拍板', '我举着手呢…']
+        : (state === 'done'
+          ? ['干完啦！', '这波不错吧？', '收工，喝口水', '活儿我拿下了']
+          : ['随时待命～', '呼吸中…', '要不咱们聊点别的？', '喝水去吧，我盯着',
+            '摸鱼也要有节奏', '在的，叫我干嘛']));
+    const index: number = Math.floor(Math.random() * pool.length);
+    this.petQuip = pool[index >= pool.length ? 0 : index];
+    if (this.petQuipTimer >= 0) {
+      clearTimeout(this.petQuipTimer);
+    }
+    this.petQuipTimer = setTimeout(() => {
+      this.petQuipTimer = -1;
+      this.petQuip = '';
+    }, 2600);
+  }
+
+  /** 双击桌宠：放大到铺满屏幕，停一下再缩回去（时间按手感定的，别太突兀）。 */
+  private playPetBoom(): void {
+    if (this.petBooming) {
+      return;
+    }
+    this.petBooming = true;
+    this.tapHaptic();
+    const frame: number = Math.max(1, this.petFrameWidth());
+    const target: number = Math.max(this.windowWidthVp, this.windowHeightVp) / frame * 1.15;
+    animateTo({ duration: 380, curve: Curve.Friction }, () => {
+      this.petBoom = Math.max(2, target);
+    });
+    setTimeout(() => {
+      animateTo({ duration: 520, curve: Curve.EaseInOut }, () => {
+        this.petBoom = 1;
+      });
+      setTimeout(() => {
+        this.petBooming = false;
+      }, 540);
+    }, 780);
   }
 
   /** 轻触反馈：设置行点按给一记很短的振动（拿不到振动器就安静跳过）。 */
@@ -6302,6 +6345,46 @@ struct Index {
               })
           }
           .alignItems(VerticalAlign.Center)
+        }
+        .width('100%')
+        .padding({ left: 18, right: 18, top: 4, bottom: 12 })
+
+        // —— 会话壁纸 ——
+        Row({ space: 10 }) {
+          Column({ space: 3 }) {
+            Text(this.tr('会话壁纸'))
+              .fontSize(this.fs(11))
+              .fontColor(this.pal().text3)
+            Text(this.wallpaper.length > 0 ? this.tr('已设置 · 自动虚化') : this.tr('无'))
+              .fontSize(this.fs(12))
+              .fontColor(this.pal().text2)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Text(this.wallpaper.length > 0 ? this.tr('更换') : this.tr('选择'))
+            .fontSize(this.fs(12))
+            .fontColor('#22D3EE')
+            .padding({ left: 12, right: 12, top: 6, bottom: 6 })
+            .backgroundColor('rgba(34,211,238,0.10)')
+            .borderRadius(10)
+            .onClick(() => {
+              this.tapHaptic();
+              this.openWallpaperPicker();
+            })
+          if (this.wallpaper.length > 0) {
+            Text(this.tr('移除'))
+              .fontSize(this.fs(12))
+              .fontColor('#F85749')
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .backgroundColor('rgba(248,87,73,0.10)')
+              .borderRadius(10)
+              .onClick(() => {
+                this.tapHaptic();
+                this.wallpaper = '';
+                this.runtime.setWallpaper('');
+                promptAction.showToast({ message: this.tr('壁纸已移除') });
+              })
+          }
         }
         .width('100%')
         .padding({ left: 18, right: 18, top: 4, bottom: 12 })

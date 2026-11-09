@@ -56,6 +56,9 @@ struct Index {
   @State petQuip: string = '';
   /** 双击桌宠时的「炸屏」缩放倍数。 */
   @State petBoom: number = 1;
+  /** 炸屏专用全屏层：单独一层，保证真的铺满整屏（不再靠小挂件自己放大）。 */
+  @State petBoomVisible: boolean = false;
+  @State petBoomScale: number = 1;
   private petQuipTimer: number = -1;
   private petBooming: boolean = false;
   /** 输入坞实际高度（输入框长高时桌宠跟着上移）。 */
@@ -1606,8 +1609,6 @@ struct Index {
         .borderRadius(14)
         .border({ width: 1, color: this.pal().border })
         .margin({ bottom: 4 })
-        .scale({ x: this.petBoom, y: this.petBoom })
-        .zIndex(this.petBooming ? 60 : 1)
         // 双击优先：onClick 会和 TapGesture(count:2) 抢事件，双击永远轮不到
         .gesture(
           GestureGroup(GestureMode.Exclusive,
@@ -1635,6 +1636,35 @@ struct Index {
     .hitTestBehavior(HitTestMode.Transparent)
     .width('100%')
     .height('100%')
+  }
+
+  /** 双击炸屏用的全屏层：居中放大当前帧，盖满整屏。 */
+  @Builder
+  PetBoomOverlay() {
+    Stack({ alignContent: Alignment.Center }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor('rgba(6,10,20,0.55)')
+      Stack({ alignContent: Alignment.TopStart }) {
+        Image(this.petPixel())
+          .width(this.petSheetWidth())
+          .height(this.petFrameHeight())
+          .objectFit(ImageFit.Fill)
+          .interpolation(ImageInterpolation.None)
+          .position({ x: -this.petFrame * this.petFrameWidth(), y: 0 })
+      }
+      .width(this.petFrameWidth())
+      .height(this.petFrameHeight())
+      .clip(true)
+      .scale({ x: this.petBoomScale, y: this.petBoomScale })
+    }
+    .width('100%')
+    // 铺满整个窗口（含状态栏/顶栏区域），否则顶部会露出聊天界面
+    .height(this.windowHeightVp > 0 ? this.windowHeightVp : 800)
+    .position({ x: 0, y: -this.topSafePadding() })
+    .zIndex(90)
+    .hitTestBehavior(HitTestMode.None)
   }
 
   /** 把精灵图按帧裁出来显示：外层裁切 + 内层按帧横向偏移。 */
@@ -2388,6 +2418,10 @@ struct Index {
       if (this.choiceOpen) {
         this.ChoiceSheetOverlay()
       }
+      // 炸屏：独立全屏层，把当前帧按「覆盖整屏」的倍数放大再回落
+      if (this.petBoomVisible) {
+        this.PetBoomOverlay()
+      }
       if (this.previewActive) {
         this.ImagePreviewOverlay()
       }
@@ -3025,16 +3059,23 @@ struct Index {
     }
     this.petBooming = true;
     this.tapHaptic();
-    const frame: number = Math.max(1, this.petFrameWidth());
-    const target: number = Math.max(this.windowWidthVp, this.windowHeightVp) / frame * 1.15;
+    const frameW: number = Math.max(1, this.petFrameWidth());
+    const frameH: number = Math.max(1, this.petFrameHeight());
+    const viewW: number = this.windowWidthVp > 0 ? this.windowWidthVp : 400;
+    const viewH: number = this.windowHeightVp > 0 ? this.windowHeightVp : 800;
+    // 覆盖整屏所需的倍数（宽高都盖住，取大的那个）
+    const target: number = Math.max(viewW / frameW, viewH / frameH) * 1.55;
+    this.petBoomScale = 1;
+    this.petBoomVisible = true;
     animateTo({ duration: 380, curve: Curve.Friction }, () => {
-      this.petBoom = Math.max(2, target);
+      this.petBoomScale = target;
     });
     setTimeout(() => {
       animateTo({ duration: 520, curve: Curve.EaseInOut }, () => {
-        this.petBoom = 1;
+        this.petBoomScale = 1;
       });
       setTimeout(() => {
+        this.petBoomVisible = false;
         this.petBooming = false;
       }, 540);
     }, 780);

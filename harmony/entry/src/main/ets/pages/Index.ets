@@ -2205,25 +2205,6 @@ struct Index {
       .position({ x: 0, y: -this.topSafePadding() })
       .width('100%')
       .hitTestBehavior(HitTestMode.None)
-      // 会话壁纸：默认虚化 + 压一层半透明底色，避免抢文字焦点
-      if (this.wallpaper.length > 0 && this.phase === PHASE_CHAT) {
-        Stack() {
-          Image(imageDataUri(this.wallpaper))
-            .width('100%')
-            .height('100%')
-            .objectFit(ImageFit.Cover)
-            .blur(16)
-          // 压一层浅色/暗色底：既要看得见壁纸，又不能抢文字
-          Column()
-            .width('100%')
-            .height('100%')
-            .backgroundColor(this.isDarkUi ? 'rgba(10,14,24,0.62)' : 'rgba(247,250,255,0.64)')
-        }
-        .height(this.windowHeightVp > 0 ? this.windowHeightVp : 800)
-        .position({ x: 0, y: -this.topSafePadding() })
-        .width('100%')
-        .hitTestBehavior(HitTestMode.None)
-      }
       Column() {
         if (this.phase === PHASE_BOOT) {
           this.BootScreen()
@@ -4349,6 +4330,23 @@ struct Index {
   @Builder
   ChatScreen() {
     Stack({ alignContent: Alignment.Bottom }) {
+      // 会话壁纸：画在会话自己的 Stack 最底层（放根容器会被会话底色盖住，看着像没加）
+      if (this.wallpaper.length > 0) {
+        Stack() {
+          Image(imageDataUri(this.wallpaper))
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Cover)
+            .blur(16)
+          Column()
+            .width('100%')
+            .height('100%')
+            .backgroundColor(this.isDarkUi ? 'rgba(10,14,24,0.62)' : 'rgba(247,250,255,0.64)')
+        }
+        .width('100%')
+        .height('100%')
+        .hitTestBehavior(HitTestMode.None)
+      }
       Column({ space: this.foldState === 'half' ? this.hingeGapVp() : 0 }) {
       Row() {
         Text('‹')

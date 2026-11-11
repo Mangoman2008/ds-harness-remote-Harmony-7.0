@@ -4,7 +4,7 @@ import { util } from '@kit.ArkTS';
 import { notificationManager } from '@kit.NotificationKit';
 import { SecureStore, StoredServerConfig, SavedProfile } from './SecureStore';
 import { RemoteServerApi, RemoteApiError, normalizeServerUrl, websocketUrl, QrLoginSession, QrLoginPoll,
-  OAuthProvider, HostPresence, initClientVersion } from '../net/ServerApi';
+  OAuthProvider, HostPresence, initClientVersion, clientVersion } from '../net/ServerApi';
 import { CloseVerdict, RelayConnectionInfo, RelayTransport, RelayTransportOptions } from '../net/RelayTransport';
 import { SecureTransport } from '../net/SecureTransport';
 import { RemoteClientCore, RemoteClientError } from '../net/RemoteClientCore';
@@ -21,6 +21,7 @@ import { RtcBridge } from './RtcBridge';
 import { NetworkMonitor, networkTypeLabel } from './NetworkMonitor';
 import { NetTrace, TraceSample } from '../util/NetTrace';
 import { LinkLog } from './LinkLog';
+import { HostCompat, HostCompatReport } from './HostCompat';
 import { KeepAlive } from './KeepAlive';
 
 // 首屏拉多少条历史：条数越多，主机经中继回放越久（更早的仍可 session/page 翻页）
@@ -865,7 +866,10 @@ export class AppRuntime {
       // list is loaded afterwards so a slow host never keeps the user locked out.
       this.connectedHostName = host.name.length > 0 ? host.name : '远程主机';
       this.connectedDeviceId = host.deviceId;
+      this.connectedHostHarness = host.harnessVersion;
+      this.connectedHostClient = host.clientVersion;
       this.transportLabel = relay.transportKind();
+      this.rememberCombo();
       logInfo('connected to host ' + host.deviceId + ' transport=' + this.transportLabel);
       const lanSkip: string = relay.lanSkipReason();
       this.pushLinkEvent('已连接 · ' + this.transportLabel
@@ -4120,6 +4124,36 @@ export class AppRuntime {
   }
 
   /** 开关「敏感内容打码」。 */
+  /** 当前连上的 Host 的版本信息（诊断用；断线后保留上次值）。 */
+  connectedHostHarness: string = '';
+  connectedHostClient: string = '';
+  /** 最近一次成功连接时的「客户端 + Host + 关键开关」指纹，用于排查「昨天还好」。 */
+  private lastCombo: string = '';
+
+  /** 组合指纹：客户端版本 + Host 版本 + 传输 + 关键开关。 */
+  comboFingerprint(): string {
+    const switches: string = [
+      this.compactHistory ? 'compact' : 'full',
+      this.secretMask ? 'mask' : 'plain',
+      this.wallpaper.length > 0 ? 'wallpaper:' + this.wallpaperDim : 'nowall',
+      this.petEnabled ? 'pet' : 'nopet'
+    ].join(',');
+    return 'client=' + clientVersion() + '|host=' + this.connectedHostHarness
+      + '|transport=' + this.transportLabel + '|' + switches;
+  }
+
+  /** 连接成功后调用：指纹变了就记一条链路事件，方便回溯「昨天还好」。 */
+  private rememberCombo(): void {
+    const combo: string = this.comboFingerprint();
+    const previous: string = this.lastCombo.length > 0 ? this.lastCombo : this.store.loadLastCombo();
+    if (previous.length > 0 && previous !== combo) {
+      LinkLog.write('combo', '组合变化 → ' + combo + '（上次 ' + previous + '）');
+      this.pushLinkEvent('本次组合与上次不同（Host/传输/开关有变），如遇异常可对照诊断里的指纹');
+    }
+    this.lastCombo = combo;
+    this.store.saveLastCombo(combo);
+  }
+
   /** 会话壁纸：压缩后的 JPEG base64，空串表示不使用。 */
   wallpaper: string = '';
 
@@ -4250,6 +4284,16 @@ export class AppRuntime {
       : '未连接';
     const rows: string[] = [];
     rows.push('主机：' + (this.connectedHostDisplayName().length > 0 ? this.connectedHostDisplayName() : '—'));
+    const compat: HostCompatReport = HostCompat.report(this.connectedHostHarness);
+    rows.push('Host 车道：' + compat.summary());
+    if (compat.notes.length > 0) {
+      rows.push('车道提示：' + compat.notes);
+    }
+    rows.push('组合指纹：' + this.comboFingerprint());
+    const lastCombo: string = this.lastCombo.length > 0 ? this.lastCombo : this.store.loadLastCombo();
+    if (lastCombo.length > 0 && lastCombo !== this.comboFingerprint()) {
+      rows.push('上次组合：' + lastCombo);
+    }
     rows.push('传输：' + (this.transportLabel.length > 0 ? this.transportLabel : '—'));
     if (relay !== undefined) {
       const skip: string = relay.lanSkipReason();

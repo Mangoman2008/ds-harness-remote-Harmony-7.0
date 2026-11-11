@@ -39,6 +39,8 @@ const KEY_SECRET_MASK = 'dshremote.secretMask.v1';
 /** 会话壁纸（压缩后的 JPEG base64；不是秘密，只存本地）。 */
 const KEY_WALLPAPER = 'dshremote.wallpaper.v1';
 const KEY_WALLPAPER_DIM = 'dshremote.wallpaperDim.v1';
+/** 上次成功连接时的组合指纹（客户端+Host+开关），排查「昨天还好」用。 */
+const KEY_LAST_COMBO = 'dshremote.lastCombo.v1';
 /** 多服务器/多账号：一份「已登录过的服务器」快照列表（含 token），存在 asset store 里。 */
 const ASSET_ALIAS_PROFILES = 'dshremote.profiles';
 
@@ -931,6 +933,18 @@ export class SecureStore {
       this.putSync(KEY_WALLPAPER_DIM, String(level));
     } catch (error) {
       logWarn('wallpaper dim save failed');
+    }
+  }
+
+  loadLastCombo(): string {
+    return this.getSync(KEY_LAST_COMBO, '');
+  }
+
+  saveLastCombo(combo: string): void {
+    try {
+      this.putSync(KEY_LAST_COMBO, combo);
+    } catch (error) {
+      logWarn('combo save failed');
     }
   }
 

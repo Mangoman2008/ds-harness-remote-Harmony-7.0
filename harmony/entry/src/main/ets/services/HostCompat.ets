@@ -74,6 +74,26 @@ export function compareVersions(a: string, b: string): number {
   return 0;
 }
 
+/**
+ * 只比 core（major.minor.patch），忽略预发布后缀。
+ * 车道判定必须用它：`0.2.2-rc.1` 属于 0.2.2 车道，不能因为「预发布 < 正式版」掉到 0.2.0 车道。
+ */
+export function compareCore(a: string, b: string): number {
+  const left: number[] = parseVersion(a);
+  const right: number[] = parseVersion(b);
+  if (left.length === 0 || right.length === 0) {
+    return 0;
+  }
+  for (let i = 0; i < 3; i += 1) {
+    const l: number = left[i] !== undefined ? left[i] : 0;
+    const r: number = right[i] !== undefined ? right[i] : 0;
+    if (l !== r) {
+      return l < r ? -1 : 1;
+    }
+  }
+  return 0;
+}
+
 /** 已知车道，按版本从旧到新。 */
 const LANES: HostLane[] = [
   makeLane('legacy', '0.1.x（旧契约）', []),
@@ -97,12 +117,12 @@ export class HostCompat {
     if (version.length === 0) {
       return report;
     }
-    if (compareVersions(version, '0.2.2') < 0) {
-      if (compareVersions(version, '0.2.0') >= 0) {
+    if (compareCore(version, '0.2.2') < 0) {
+      if (compareCore(version, '0.2.0') >= 0) {
         report.laneId = '0.2.0';
         report.laneLabel = '0.2.0（Session V3）';
         report.capabilities = ['session-v3'];
-      } else if (compareVersions(version, '0.1.0') >= 0) {
+      } else if (compareCore(version, '0.1.0') >= 0) {
         report.laneId = 'legacy';
         report.laneLabel = '0.1.x（旧契约）';
       } else {
@@ -111,7 +131,7 @@ export class HostCompat {
       }
       return report;
     }
-    if (compareVersions(version, '0.3.0') < 0) {
+    if (compareCore(version, '0.3.0') < 0) {
       report.laneId = '0.2.2';
       report.laneLabel = '0.2.2（附件完整引用）';
       report.capabilities = ['session-v3', 'attachment-full-ref'];

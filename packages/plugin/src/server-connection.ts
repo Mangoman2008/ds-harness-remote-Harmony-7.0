@@ -49,6 +49,7 @@ import type { HostIdentity, IdentityStore, TrustedPeer } from './identity-store.
 import type { SafeLogger } from './logging.js'
 import type { AuthorizedPeerDevice, HostServerApi } from './server-api.js'
 import { ServerApiError } from './server-api.js'
+import { createNodeWebSocket } from './node-websocket.js'
 import type { AuthenticatedPeerChannel } from './types.js'
 import { PLUGIN_VERSION } from './version.js'
 
@@ -116,7 +117,7 @@ export class HostServerConnection {
     private readonly api: HostServerApi,
     private readonly connections: ConnectionController,
     private readonly logger: SafeLogger,
-    private readonly createWebSocket: WebSocketFactory = url => new WebSocket(url) as unknown as WebSocketLike,
+    private readonly createWebSocket: WebSocketFactory = url => createNodeWebSocket(url) as unknown as WebSocketLike,
     private readonly rtcFactoryProvider?: () => Promise<RtcPeerConnectionFactory | undefined>,
     private readonly hostCapabilities: () => readonly string[] = () => [],
     private readonly harnessVersion?: string,
@@ -212,9 +213,7 @@ export class HostServerConnection {
         if (TERMINAL_AUTH_ERRORS.has(code)) {
           this.logger.warn(code === 'CONNECTION_REPLACED'
             ? 'Another instance is using this Host identity. Stop it or use a separate DSH_HOME; automatic reconnect is paused.'
-            : code === 'SERVER_CREDENTIALS_BUSY'
-              ? 'Credential refresh is locked. Stop other instances; after a crash, stop all instances before removing server-credentials.json.refresh-lock and authorizing again.'
-              : 'Host authorization failed. Authorize this Host again from a Remote client or in Remote settings.')
+            : 'Host authorization failed. Authorize this Host again from a Remote client or in Remote settings.')
         }
         if (code === 'DEVICE_REVOKED') {
           try {
@@ -1344,7 +1343,6 @@ export class HostServerConnection {
 
 const TERMINAL_AUTH_ERRORS = new Set([
   'CONNECTION_REPLACED',
-  'SERVER_CREDENTIALS_BUSY',
   'ACCOUNT_AUTH_REQUIRED',
   'AUTH_INVALID',
   'DEVICE_OWNERSHIP_REQUIRED',

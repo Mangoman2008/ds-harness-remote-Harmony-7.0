@@ -105,6 +105,9 @@ class PendingRemoteEvent {
   event: string = '';
   eventId: string = '';
   sessionId: string = '';
+  /** 当初推给界面的那一帧，原样留着才能在会话(重)开时补发。 */
+  rpcId: string = '';
+  payload: Record<string, Object> = {};
 }
 
 class AssistantStreamState {
@@ -1017,11 +1020,6 @@ export class HarnessAlphaClient {
   private routeWaterfall(event: string, eventId: string, sessionId: string,
     request: Record<string, Object>): void {
     if (event === 'approval/request') {
-      const pending: PendingRemoteEvent = new PendingRemoteEvent();
-      pending.event = event;
-      pending.eventId = eventId;
-      pending.sessionId = sessionId;
-      this.pendingEvents.set(eventId, pending);
       const payload: Record<string, Object> = {
         'type': 'approval/requested',
         'sessionId': sessionId,
@@ -1036,23 +1034,81 @@ export class HarnessAlphaClient {
       if (reason.length > 0) {
         payload['reason'] = reason;
       }
+      this.rememberPendingEvent(event, eventId, sessionId, eventId, payload);
       this.emitFrame(eventId, payload);
       return;
     }
     if (event === 'user-questions/request') {
-      const pending: PendingRemoteEvent = new PendingRemoteEvent();
-      pending.event = event;
-      pending.eventId = eventId;
-      pending.sessionId = sessionId;
-      this.pendingEvents.set(eventId, pending);
       const questions: Object | undefined = request['questions'];
       const payload: Record<string, Object> = {
         'type': 'question/requested',
         'sessionId': sessionId,
         'questions': questions !== undefined ? questions : []
       };
+      this.rememberPendingEvent(event, eventId, sessionId, eventId, payload);
       this.emitFrame(eventId, payload);
     }
+  }
+
+  /**
+   * 暂存待作答的审批/提问帧。
+   * 只发一次是不够的：审批可能在别的会话、界面还没切过来、或刚重连完的时候到达，
+   * 那一帧就永远错过了（上游 `republishPendingSessionInteractions` 同理）。
+   */
+  private rememberPendingEvent(event: string, eventId: string, sessionId: string,
+    rpcId: string, payload: Record<string, Object>): void {
+    const pending: PendingRemoteEvent = new PendingRemoteEvent();
+    pending.event = event;
+    pending.eventId = eventId;
+    pending.sessionId = sessionId;
+    pending.rpcId = rpcId;
+    pending.payload = payload;
+    this.pendingEvents.set(eventId, pending);
+  }
+
+  /**
+   * 重连后换的是新的客户端实例，客户端里的暂存会随实例消失，
+   * 所以宿主层要把它记着的那几帧交还回来（断线期间到达的审批只能靠这条路径活下来）。
+   */
+  restorePendingInteractions(frames: HarnessClientFrame[]): void {
+    for (const frame of frames) {
+      const type: string = jsonStr(frame.payload, 'type', '');
+      const sessionId: string = jsonStr(frame.payload, 'sessionId', '');
+      if (sessionId.length === 0) {
+        continue;
+      }
+      if (type === 'approval/requested') {
+        const approvalId: string = jsonStr(frame.payload, 'approvalId', '');
+        if (approvalId.length > 0) {
+          this.rememberPendingEvent('approval/request', approvalId, sessionId, frame.rpcId, frame.payload);
+        }
+        continue;
+      }
+      if (type === 'question/requested' && frame.rpcId.length > 0) {
+        this.rememberPendingEvent('user-questions/request', frame.rpcId, sessionId, frame.rpcId, frame.payload);
+      }
+    }
+  }
+
+  /**
+   * 会话(重)开时补发该会话里还没作答的审批/提问帧。
+   * 返回补发的条数，方便宿主层决定是否需要再兜一层。
+   */
+  republishPendingSessionInteractions(sessionId: string): number {
+    if (sessionId.length === 0) {
+      return 0;
+    }
+    let count: number = 0;
+    this.pendingEvents.forEach((pending: PendingRemoteEvent) => {
+      if (pending.sessionId === sessionId && pending.rpcId.length > 0) {
+        this.emitFrame(pending.rpcId, pending.payload);
+        count += 1;
+      }
+    });
+    if (count > 0) {
+      logInfo('republish pending interactions session=' + sessionId + ' n=' + count);
+    }
+    return count;
   }
 
   private cancelRemoteEvent(eventId: string): void {

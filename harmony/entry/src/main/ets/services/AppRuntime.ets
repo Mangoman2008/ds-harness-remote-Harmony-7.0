@@ -49,6 +49,17 @@ export const DEFAULT_ACCOUNT: string = 'admin@dsh.local';
 
 const MAX_TOOL_DETAIL_CHARS: number = 8000;
 
+/**
+ * 待作答的远程交互（审批/提问）最多替用户留着多久。
+ * 断线期间主机撤销的事件我们收不到 resolved，只能按时间兜底，否则会一直摆一张点不动的卡。
+ */
+const PENDING_INTERACTION_TTL_MS: number = 15 * 60 * 1000;
+
+class PendingInteraction {
+  frame: HarnessClientFrame = new HarnessClientFrame();
+  at: number = 0;
+}
+
 /** One rendered question inside a `question` chat card. */
 export class ChatQuestion {
   id: string = '';
@@ -144,6 +155,10 @@ export class AppRuntime {
   transportLabel: string = '';
   /** 历史图片字节缓存：attachmentId -> base64（'' 表示取失败，别反复打主机）。 */
   private attachmentCache: Map<string, string> = new Map<string, string>();
+  /** 还没作答的审批/提问帧，按事件 id 暂存：重连会换新的客户端实例，只有这层活得下来。 */
+  private pendingInteractions: Map<string, PendingInteraction> = new Map<string, PendingInteraction>();
+  /** 这批待答交互属于哪台主机：换主机就整批作废。 */
+  private pendingInteractionsHost: string = '';
   /** 已经尝试补过的附件，避免 hydrate 死循环。 */
   private fetchedAttachments: Map<string, string> = new Map<string, string>();
   /** 历史图片补水已排程（历史是异步帧回来的，不能在 openSession 里只跑一次）。 */
@@ -866,6 +881,11 @@ export class AppRuntime {
       // list is loaded afterwards so a slow host never keeps the user locked out.
       this.connectedHostName = host.name.length > 0 ? host.name : '远程主机';
       this.connectedDeviceId = host.deviceId;
+      // 换主机就把上一台的待答交互清掉：事件 id 只在那台主机上有意义
+      if (this.pendingInteractionsHost !== host.deviceId) {
+        this.pendingInteractions.clear();
+        this.pendingInteractionsHost = host.deviceId;
+      }
       this.connectedHostHarness = host.harnessVersion;
       this.connectedHostClient = host.clientVersion;
       this.transportLabel = relay.transportKind();
@@ -2683,6 +2703,13 @@ export class AppRuntime {
       await harness.respondApproval(item.frameRpcId, item.sessionId, item.approvalId, outcome);
     } catch (error) {
       this.errorMsg = errorMessage(error);
+      // 补发出来的审批可能早在断线期间被主机撤销/超时了：别再留一张点不动的卡
+      this.forgetInteraction(item.approvalId);
+      const expired: Record<string, Object> = {
+        'approvalId': item.approvalId,
+        'outcome': 'expired'
+      };
+      this.messages = resolveApproval(this.messages, expired);
     }
     this.busyAction = '';
     this.notify();
@@ -2762,6 +2789,12 @@ export class AppRuntime {
       await harness.respondQuestion(item.frameRpcId, item.sessionId, value);
     } catch (error) {
       this.errorMsg = errorMessage(error);
+      this.forgetInteraction(item.frameRpcId);
+      const expired: Record<string, Object> = {
+        'questionRpcId': item.frameRpcId,
+        'outcome': 'cancelled'
+      };
+      this.messages = resolveQuestion(this.messages, expired);
     }
     this.busyAction = '';
     this.notify();
@@ -3563,6 +3596,8 @@ export class AppRuntime {
       return;
     }
     this.messages = foldHistory(page.entries);
+    // 必须在历史落到 this.messages 之后再补发：补发是同步回调，早了会被这行覆盖掉。
+    this.replayPendingInteractions(harness, sessionId);
     this.historyHasMore = page.hasMore;
     this.oldestHistorySeq = oldestSeqOf(page.entries);
     this.rememberHistory(sessionId, this.messages);
@@ -4500,6 +4535,56 @@ export class AppRuntime {
     return pins[hostDeviceId] !== undefined;
   }
 
+  private rememberInteraction(key: string, frame: HarnessClientFrame): void {
+    if (key.length === 0) {
+      return;
+    }
+    const pending: PendingInteraction = new PendingInteraction();
+    pending.frame = frame;
+    pending.at = Date.now();
+    this.pendingInteractions.set(key, pending);
+  }
+
+  private forgetInteraction(key: string): void {
+    if (key.length === 0) {
+      return;
+    }
+    this.pendingInteractions.delete(key);
+  }
+
+  /**
+   * 会话(重)开、重连之后把还没作答的审批/提问补回聊天。
+   * 上游在 client-core 的 `republishPendingSessionInteractions` 里做的是同一件事；
+   * 我们的重连会新建客户端实例，所以帧还额外存在这一层，避免断线期间到达的审批凭空消失。
+   */
+  private replayPendingInteractions(harness: HarnessAlphaClient, sessionId: string): void {
+    if (sessionId.length === 0) {
+      return;
+    }
+    const now: number = Date.now();
+    const frames: HarnessClientFrame[] = [];
+    const stale: string[] = [];
+    this.pendingInteractions.forEach((pending: PendingInteraction, key: string) => {
+      if (now - pending.at > PENDING_INTERACTION_TTL_MS) {
+        stale.push(key);
+        return;
+      }
+      if (jsonStr(pending.frame.payload, 'sessionId', '') !== sessionId) {
+        return;
+      }
+      frames.push(pending.frame);
+    });
+    for (const key of stale) {
+      this.pendingInteractions.delete(key);
+    }
+    if (frames.length === 0) {
+      return;
+    }
+    harness.restorePendingInteractions(frames);
+    const count: number = harness.republishPendingSessionInteractions(sessionId);
+    logInfo('replay pending interactions session=' + sessionId + ' n=' + count);
+  }
+
   private handleFrame(frame: HarnessClientFrame): void {
     const payload: Record<string, Object> = frame.payload;
     const type: string = jsonStr(payload, 'type', '');
@@ -4509,6 +4594,9 @@ export class AppRuntime {
     }
     if (type === 'approval/requested') {
       const sessionId: string = jsonStr(payload, 'sessionId', '');
+      // 先记下来再看是不是当前会话：审批可能在你翻别的会话/刚重连时到达，
+      // 以前这种帧直接丢掉，界面上就永远不会出现，也就没法在 dsh-remote 里点。
+      this.rememberInteraction(jsonStr(payload, 'approvalId', ''), frame);
       if (sessionId.length === 0 || sessionId === this.currentSessionId) {
         this.messages = addApproval(this.messages, payload, frame.rpcId);
         this.notify();
@@ -4516,12 +4604,14 @@ export class AppRuntime {
       return;
     }
     if (type === 'approval/resolved') {
+      this.forgetInteraction(jsonStr(payload, 'approvalId', ''));
       this.messages = resolveApproval(this.messages, payload);
       this.notify();
       return;
     }
     if (type === 'question/requested') {
       const sessionId: string = jsonStr(payload, 'sessionId', '');
+      this.rememberInteraction(frame.rpcId, frame);
       if (sessionId.length === 0 || sessionId === this.currentSessionId) {
         this.messages = addQuestion(this.messages, payload, frame.rpcId);
         this.notify();
@@ -4529,6 +4619,7 @@ export class AppRuntime {
       return;
     }
     if (type === 'question/resolved') {
+      this.forgetInteraction(jsonStr(payload, 'questionRpcId', ''));
       this.messages = resolveQuestion(this.messages, payload);
       this.notify();
       return;

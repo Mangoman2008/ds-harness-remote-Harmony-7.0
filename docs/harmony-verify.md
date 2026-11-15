@@ -74,3 +74,8 @@ harmony/scripts/smoke.sh $P 60
   所以这张卡只可能来自新增的补发路径（改动前该帧在 `handleFrame` 里按会话过滤丢掉）。
 - 未覆盖：断线重连期间到达的审批（当时手机锁屏，`hilog` 未抓到
   `replay pending interactions` 那行）。
+
+0.17.159 起给作答链路补了日志（`approval/requested … 当前会话=`、`respondApproval 点击
+… 卡片还在列表里=`、`respondApproval 失败 … : 原因`），失败时一律把卡片标成「已失效」。
+2026-11-16 00:40 实测（正常路径，未断线）：审批到达 → 点击 → 79ms 内 `respondApproval 已提交`；
+同一会话 00:41/00:42 两次回前台体检均无重连。

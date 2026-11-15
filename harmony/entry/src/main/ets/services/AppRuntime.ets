@@ -2693,9 +2693,13 @@ export class AppRuntime {
   async respondApproval(item: ChatItem, allowed: boolean): Promise<void> {
     const harness: HarnessAlphaClient | undefined = this.harness;
     if (harness === undefined || item.kind !== 'approval' || item.approvalOutcome.length > 0) {
+      logWarn('respondApproval 忽略：harness=' + (harness !== undefined ? '有' : '无')
+        + ' kind=' + item.kind + ' outcome=' + item.approvalOutcome);
       return;
     }
     const outcome: string = allowed ? 'allowed-once' : 'rejected';
+    logInfo('respondApproval 点击 approvalId=' + item.approvalId + ' -> ' + outcome
+      + ' 卡片还在列表里=' + (this.messages.indexOf(item) >= 0));
     this.busyAction = `approval:${item.id}`;
     this.errorMsg = '';
     this.notify();
@@ -2703,6 +2707,7 @@ export class AppRuntime {
       await harness.respondApproval(item.frameRpcId, item.sessionId, item.approvalId, outcome);
     } catch (error) {
       this.errorMsg = errorMessage(error);
+      logWarn('respondApproval 失败 approvalId=' + item.approvalId + ' : ' + this.errorMsg);
       // 补发出来的审批可能早在断线期间被主机撤销/超时了：别再留一张点不动的卡
       this.forgetInteraction(item.approvalId);
       const expired: Record<string, Object> = {
@@ -4596,8 +4601,11 @@ export class AppRuntime {
       const sessionId: string = jsonStr(payload, 'sessionId', '');
       // 先记下来再看是不是当前会话：审批可能在你翻别的会话/刚重连时到达，
       // 以前这种帧直接丢掉，界面上就永远不会出现，也就没法在 dsh-remote 里点。
+      const matches: boolean = sessionId.length === 0 || sessionId === this.currentSessionId;
+      logInfo('approval/requested id=' + jsonStr(payload, 'approvalId', '')
+        + ' 当前会话=' + (matches ? '是' : '否（先暂存）'));
       this.rememberInteraction(jsonStr(payload, 'approvalId', ''), frame);
-      if (sessionId.length === 0 || sessionId === this.currentSessionId) {
+      if (matches) {
         this.messages = addApproval(this.messages, payload, frame.rpcId);
         this.notify();
       }

@@ -925,8 +925,23 @@ export class HarnessAlphaClient {
 
   /** Answer an `approval/requested` frame ('allowed-once' | 'rejected'). */
   async respondApproval(frameRpcId: string, sessionId: string, approvalId: string, outcome: string): Promise<void> {
-    const eventId: string = this.pendingEvents.has(frameRpcId) ? frameRpcId : approvalId;
-    await this.respondEvent(eventId, outcome);
+    const known: boolean = this.pendingEvents.has(frameRpcId);
+    const eventId: string = known ? frameRpcId : approvalId;
+    logInfo('respondApproval event=' + eventId + ' outcome=' + outcome
+      + ' pending=' + this.pendingEvents.size + ' known=' + known
+      + ' clientId=' + (this.eventClientId.length > 0 ? '有' : '空'));
+    try {
+      await this.respondEvent(eventId, outcome);
+    } catch (error) {
+      const detail: string = error instanceof Error ? error.message : String(error);
+      logWarn('respondApproval 失败 event=' + eventId + ' : ' + detail);
+      // 主机那头已经不认这条交互（超时/撤销/换了连接）：本地别再留着
+      this.pendingEvents.delete(eventId);
+      if (error instanceof Error) {
+        throw error;
+      }
+      throw new RemoteGatewayError('INVALID_MESSAGE', '作答失败：' + detail);
+    }
     this.pendingEvents.delete(eventId);
     const payload: Record<string, Object> = {
       'type': 'approval/resolved',
@@ -935,6 +950,7 @@ export class HarnessAlphaClient {
       'outcome': outcome
     };
     this.emitFrame('', payload);
+    logInfo('respondApproval 已提交 event=' + eventId);
   }
 
   /** Answer a `question/requested` frame with `{answers:[{id,selected,custom?}]}`. */

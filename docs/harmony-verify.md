@@ -64,3 +64,13 @@ harmony/scripts/smoke.sh $P 60
 4. 断线重连后重复第 3 步：断线期间到达的审批，重连并重开会话后同样要能补出来；
 5. 日志应有 `replay pending interactions session=… n=1`（`hdc shell hilog -T DSHREMOTE`）；
 6. 补发出来的卡片如果主机那头早已撤销，点它会显示「已失效」，不会一直转圈或留死卡。
+
+实测 2026-11-16（0.17.158-lan，手机 PLU-AL10 → 主机 DESKTOP-R5BVQJJ/win32）：
+
+- 新会话发「往 `C:\Users\Chow\AppData\Local\Temp` 写文件」→ 主机先按沙箱拒绝一次，
+  随后申请 `danger-full-access` 升级（`approval/request`）；
+- 审批到达时 App 正停在另一个会话上，两分钟后才切回该会话 → 审批卡出现且可点；
+- 点「允许」后卡片变「已允许」，主机侧命令继续执行。App 进程自 00:18 起未重启，
+  所以这张卡只可能来自新增的补发路径（改动前该帧在 `handleFrame` 里按会话过滤丢掉）。
+- 未覆盖：断线重连期间到达的审批（当时手机锁屏，`hilog` 未抓到
+  `replay pending interactions` 那行）。

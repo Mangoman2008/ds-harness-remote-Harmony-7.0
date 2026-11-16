@@ -12,12 +12,6 @@
 </p>
 
 <p align="center">
-  <strong>本仓库是 HarmonyOS 7.0 移植版</strong>：在上游基础上新增原生鸿蒙客户端（源码在 <a href="harmony/">harmony/</a>）<br>
-  中文说明与移植细节见 <a href="README.zh.md#这个仓库是什么鸿蒙移植版">README.zh.md</a> ·
-  客户端文档 <a href="docs/harmony-client.md">docs/harmony-client.md</a>
-</p>
-
-<p align="center">
   <a href="docs/README.md"><img src="https://img.shields.io/badge/Documentation-blue?logo=googledocs&amp;logoColor=white" alt="Documentation"></a>
   <a href="https://dsh.r2049.cn/app"><img src="https://img.shields.io/badge/Web-4D6BFE?logo=googlechrome&amp;logoColor=white" alt="Web"></a>
   <a href="https://github.com/liguobao/ds-harness-remote/releases/latest"><img src="https://img.shields.io/badge/Android-3DDC84?logo=android&amp;logoColor=white" alt="Android"></a>
@@ -29,6 +23,10 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-blue" alt="License: MIT"></a>
   <a href="apps/server/README.md"><img src="https://img.shields.io/badge/Self--hosting-Docker-2496ED?logo=docker&amp;logoColor=white" alt="Self-hosting"></a>
   <a href="https://dshfind.com/en/plugins/liguobao/ds-harness-remote?ref=badge"><img src="https://dshfind.com/api/badge/liguobao/ds-harness-remote?metric=downloads&amp;lang=en" alt="dshfind downloads"></a>
+</p>
+
+<p align="center">
+  <a href="https://trendshift.io/repositories/177732" target="_blank"><img src="https://trendshift.io/api/badge/repositories/177732" alt="liguobao%2Fds-harness-remote | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a>
 </p>
 
 ## Connect once. Ready whenever you are.
@@ -54,38 +52,13 @@ The DeepSeek Harness desktop edition is supported. Install the latest release:
 - Clients are available across Android, iOS, Web, and native DSH.
 - Multiple clients can connect to the same Harness Host simultaneously, with RPC calls and streams isolated per connection.
 
-## What is this repository (HarmonyOS port)
+## Native HarmonyOS client
 
-This repository is a **HarmonyOS 7.0 port** of [liguobao/ds-harness-remote](https://github.com/liguobao/ds-harness-remote).
-The upstream plugin, server, protocol and tooling are kept in sync (currently aligned with upstream `v0.6.4`),
-and a **native HarmonyOS client** is added on top (pure ArkTS + WebRTC inside ArkWeb).
+The [HarmonyOS client](apps/harmony/) supports HarmonyOS 7.0 (API 26) and newer. Build it with DevEco Studio; see the [client guide](docs/harmony-client.md) for setup, security, signing and validation.
 
-- **Client source**: [`harmony/`](harmony/) · HarmonyOS 7.0 (API 26) or newer, built with DevEco Studio
-- **Capabilities**: account sign-in, multi-host list with aliases, end-to-end encryption (Noise IK), multi-session,
-  session search / archive / pin, image and voice input, slash commands, steer & interrupt, model and reasoning effort,
-  permission presets, scheduled tasks, workspace grouping, breakpoint-driven two/three-pane layout (tablet & 2-in-1),
-  Chinese/English UI, light/dark plus accent themes, desk pet (whale-girl sprite pack supplied
-  by the user: tap to chat, double-tap to zoom, dozes off when idle), chat wallpaper (blurred by
-  default, three strength levels)
-- **Stability work**: link log persisted to disk (`link.log`, survives restarts), auto reconnect with session-stream reopen,
-  silence probing, long-running task keepalive (survives screen-off), LAN/P2P direct path first with relay/TURN fallback
-- **Build & test**:
-  ```sh
-  harmony/scripts/build-local.sh                     # signed locally; signing material never enters the repo
-  harmony/scripts/smoke.sh 192.168.3.145:34521       # build → install → launch → wait for "connected · lan" → crash check
-  node harmony/scripts/check-i18n.mjs                # UI strings must all have English
-  ```
-- **Docs**: [client guide](docs/harmony-client.md) · [LAN & link log](docs/harmony-link-log.md) ·
-  [2026-11-09 milestone](docs/harmony-milestone-2026-11-09.md) · [release notes](docs/release-0.17.86.md)
-- **Upstream sync**: `git fetch upstream && git merge upstream/main`
-
-### Interface preview (real device, redacted)
-
-| Sessions drawer | New session · LAN | Composer dock |
+| Sessions drawer | New session | Composer |
 | --- | --- | --- |
-| ![sessions drawer](docs/images/harmony/sessions-drawer.jpg) | ![new session](docs/images/harmony/chat-empty.jpg) | ![composer](docs/images/harmony/composer.jpg) |
-
-> The `LAN` badge means the direct local-network path is in use. Session titles, workspace names and quick prompts are blurred.
+| ![Sessions drawer](docs/images/harmony/sessions-drawer.jpg) | ![New session](docs/images/harmony/chat-empty.jpg) | ![Composer](docs/images/harmony/composer.jpg) |
 
 ## Supported clients
 
@@ -94,7 +67,7 @@ and a **native HarmonyOS client** is added on top (pure ArkTS + WebRTC inside Ar
 | DSH plugin | Remote sidebar | Supported | Control other devices or act as a Host—the choice is yours! |
 | Web | Browser page | Supported | Open [https://dsh.r2049.cn](https://dsh.r2049.cn); reuses the native Harness interface |
 | Android | Native app | Supported | Download the APK from [Releases](https://github.com/liguobao/ds-harness-remote/releases/latest); see the [Android guide](apps/android/README.md) |
-| HarmonyOS&nbsp;7.* | Native app | Supported | Source in [harmony/](harmony/); build with DevEco Studio on HarmonyOS 7.0 (API 26) or newer. See the [HarmonyOS guide](docs/harmony-client.md) |
+| HarmonyOS | Native app | Source available | HarmonyOS 7.0 (API 26)+; build with DevEco Studio. See the [client guide](docs/harmony-client.md) |
 | DSH Go | A standout app by ccch1mneyyy | Supported | See [ccch1mneyyy/dsh-go: run DSH directly on your phone or control DSH on your computer remotely.](https://github.com/ccch1mneyyy/dsh-go) |
 | iOS | TestFlight beta | Beta | Not publicly released; see [issue #20](https://github.com/liguobao/ds-harness-remote/issues/20) |
 | dsh-TUI | Standalone Host bundle + CLI | Core device checks passed | Install matching `ds-harness-remote-tui`; see [tested versions and limits](docs/compatibility.md). The installer does not create a Web service for it |

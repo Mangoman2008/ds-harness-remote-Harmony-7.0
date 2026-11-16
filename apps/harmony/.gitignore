@@ -1,0 +1,23 @@
+/oh_modules
+**/build
+/.hvigor
+.cxx
+/.clangd
+/.clang-format
+/.clang-tidy
+**/.test
+/.appanalyzer
+/.bitfun
+/.idea
+/local.properties
+*.local.json5
+*.log
+*.hap
+/release/
+.DS_Store
+.crypto-bundle.mjs
+.crypto-entry.ts
+.build-profile.tracked.json5
+
+# 桌宠素材（使用者自备，不进仓库）
+/entry/src/main/resources/rawfile/pets/

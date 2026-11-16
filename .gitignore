@@ -25,6 +25,3 @@ artifacts/
 
 # Minimal self-hosted Server credentials and local state
 apps/server/data/
-
-# 第三方桌宠素材（dsh-go 的鲸娘）版权不随仓库分发，只在本机存在
-harmony/entry/src/main/resources/rawfile/pets/

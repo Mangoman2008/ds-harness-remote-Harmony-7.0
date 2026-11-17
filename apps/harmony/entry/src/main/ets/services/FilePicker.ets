@@ -4,7 +4,7 @@
  * 远端协议只接受「先上传拿到 receiptId，再在 prompt 里放 `{type:'file', receiptId}`」，
  * 所以这里不做压缩、不改内容：字节原样送上去，主机负责暂存与会话内引用。
  * 单条消息上限 4 MiB（Noise 分片 48 KiB/片），base64 会膨胀约 1/3，
- * 因此原始文件控制在 2.8 MB 以内，超了直接挡下来并说明原因。
+ * 因此原始文件控制在 2.6 MB 以内，超了直接挡下来并说明原因。
  */
 
 import { picker } from '@kit.CoreFileKit';
@@ -19,8 +19,8 @@ export class PickedFile {
   bytes: number = 0;
 }
 
-/** 原始字节上限：base64 后约 3.7 MiB，留在单条 4 MiB 之内。 */
-export const MAX_FILE_BYTES: number = 2800000;
+/** 原始字节上限：base64 后约 3.5 MiB，给单条 4 MiB 留出余量。 */
+export const MAX_FILE_BYTES: number = 2600000;
 
 /** 打开系统文件选择器；用户取消、或文件读不出来时返回空数组。 */
 export async function pickFiles(maxCount: number): Promise<PickedFile[]> {

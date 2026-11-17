@@ -831,7 +831,7 @@ struct Index {
       }
       const file: PickedFile = files[0];
       if (file.bytes > MAX_FILE_BYTES) {
-        promptAction.showToast({ message: this.tr('文件超过 2.8MB，暂时发不了') });
+        promptAction.showToast({ message: this.tr('文件超过 2.6MB，暂时发不了') });
         return;
       }
       this.runtime.uploadFile(file).then((part: PromptFilePart) => {

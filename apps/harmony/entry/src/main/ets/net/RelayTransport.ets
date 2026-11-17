@@ -1,4 +1,5 @@
 import { webSocket } from '@kit.NetworkKit';
+import { lanCooldownMs } from './LanRetryPolicy';
 import { buildControlFrameJson, buildRelayDataFrameJson, PROTOCOL_VERSION } from '../protocol/Protocol';
 import { parseFrame, jsonStr, jsonNum, jsonValue, jsonStrArr, ParsedFrame } from '../protocol/Types';
 import { toBase64Url, fromBase64Url } from '../crypto/Bytes';
@@ -843,7 +844,7 @@ export class RelayTransport {
    */
   private coolDownLanAfterDrop(): void {
     lanFailureStreak += 1;
-    const cooldownMs: number = lanFailureStreak >= 2 ? 10 * 60 * 1000 : 60 * 1000;
+    const cooldownMs: number = lanCooldownMs(lanFailureStreak);
     lanCooldownUntil = Date.now() + cooldownMs;
     logWarn('webrtc: 直连数据面断开（连续 ' + lanFailureStreak + ' 次），'
       + Math.round(cooldownMs / 1000) + ' 秒内重连先走中继');

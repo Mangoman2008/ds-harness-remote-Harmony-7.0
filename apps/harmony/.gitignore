@@ -18,6 +18,7 @@
 .crypto-bundle.mjs
 .hostcompat-bundle.mjs
 .replay-policy-bundle.mjs
+.lan-retry-bundle.mjs
 .crypto-entry.ts
 .hostcompat-entry.ts
 .build-profile.tracked.json5

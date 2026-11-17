@@ -13,6 +13,7 @@ import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRem
   DirectoryEntry, HarnessSchedule, HarnessScheduleDelivery, HarnessSessionEvent, HarnessWorkspace,
   HarnessWorkspaceSnapshot, HistoryPage, PromptImagePart, PromptFilePart } from '../net/HarnessClient';
 import { PickedFile } from './FilePicker';
+import { ReplayVerdict, classifyPending } from './ReplayPolicy';
 import { DeviceIdentity, TokenPair, RemoteHostDevice, AuthorizedPeerDevice, AccountLoginResult } from '../model/Types';
 import { asArray, asBool, asNum, asRecord, asStr, jsonStr, jsonNum } from '../protocol/Types';
 import { randomId } from '../crypto/Bytes';
@@ -4641,7 +4642,8 @@ export class AppRuntime {
     const frames: HarnessClientFrame[] = [];
     const stale: string[] = [];
     this.pendingInteractions.forEach((pending: PendingInteraction, key: string) => {
-      if (now - pending.at > PENDING_INTERACTION_TTL_MS) {
+      const verdict: ReplayVerdict = classifyPending(pending.at, 0, now, PENDING_INTERACTION_TTL_MS);
+      if (verdict.expired) {
         stale.push(key);
         return;
       }
@@ -4664,8 +4666,12 @@ export class AppRuntime {
         continue;
       }
       const pending: PendingInteraction | undefined = this.pendingInteractions.get(key);
-      if (pending !== undefined && this.connectedAt > 0 && pending.at < this.connectedAt) {
-        this.replayHints.set(key, '连接已重连，这条确认可能已失效');
+      if (pending !== undefined) {
+        const verdict: ReplayVerdict = classifyPending(pending.at, this.connectedAt, Date.now(),
+          PENDING_INTERACTION_TTL_MS);
+        if (verdict.crossConnection && verdict.hint.length > 0) {
+          this.replayHints.set(key, verdict.hint);
+        }
       }
     }
     harness.restorePendingInteractions(frames);

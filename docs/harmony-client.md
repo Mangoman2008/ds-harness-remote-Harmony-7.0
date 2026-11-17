@@ -51,6 +51,13 @@ node apps/harmony/scripts/bump-version.mjs --check
 
 Node 测试用 shim 替代鸿蒙 Kit，验证共享 Noise 金标向量及安全存储失败路径；它不验证 ArkTS 编译、系统 Kit、ArkWeb 或设备生命周期。原生构建和设备侧测试必须用 SDK 独立执行。
 
+发版时用脚本生成发布说明骨架并打 tag（tag 只在本地，推送要显式 `--push`）：
+
+```sh
+node apps/harmony/scripts/release.mjs --notes > /tmp/release.md
+node apps/harmony/scripts/release.mjs --tag
+```
+
 真机烟测要求已签名安装、已登录且曾连接目标 Host：
 
 ```sh

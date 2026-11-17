@@ -2727,7 +2727,18 @@ export class AppRuntime {
     if (harness === undefined || sessionId.length === 0) {
       throw new Error('还没连上会话');
     }
-    const receiptId: string = await harness.sessionUploadFile(sessionId, file.base64, file.name);
+    let receiptId: string = '';
+    try {
+      receiptId = await harness.sessionUploadFile(sessionId, file.base64, file.name);
+    } catch (error) {
+      const detail: string = errorMessage(error);
+      // 主机侧 allowlist 是 0.6.5 才加入 fileUploads/upload 的：旧主机只会回「endpoint not allowed」，
+      // 直接把这句网关话翻译成用户能行动的提示，别让他对着英文发愣。
+      if (detail.indexOf('not allowed') >= 0 || detail.indexOf('notallowed') >= 0) {
+        throw new Error('主机插件太旧，暂不支持文件上传（把 Host 端升级到 0.6.5 以上即可）');
+      }
+      throw new Error(detail);
+    }
     const part: PromptFilePart = new PromptFilePart();
     part.receiptId = receiptId;
     part.name = file.name;

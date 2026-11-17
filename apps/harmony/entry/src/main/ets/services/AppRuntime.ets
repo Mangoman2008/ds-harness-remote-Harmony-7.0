@@ -1,4 +1,4 @@
-import { common } from '@kit.AbilityKit';
+import { common, WantAgent, wantAgent } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
 import { notificationManager } from '@kit.NotificationKit';
@@ -1235,8 +1235,25 @@ export class AppRuntime {
         }
       }
     };
-    notificationManager.publish(request).catch((error: Error) => {
-      logWarn('publish attention notification failed');
+    // 点通知能直接回到 App；拿不到 wantAgent 就退化成不可点，通知本身照发。
+    wantAgent.getWantAgent({
+      wants: [{
+        bundleName: 'cn.r2049.dshremote',
+        abilityName: 'EntryAbility'
+      }],
+      actionType: wantAgent.OperationType.START_ABILITY,
+      requestCode: 102,
+      actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
+    }).then((agent: WantAgent) => {
+      request.wantAgent = agent;
+      notificationManager.publish(request).catch((error: Error) => {
+        logWarn('publish attention notification failed');
+      });
+    }).catch(() => {
+      logWarn('attention notification wantAgent unavailable');
+      notificationManager.publish(request).catch((error: Error) => {
+        logWarn('publish attention notification failed');
+      });
     });
   }
 

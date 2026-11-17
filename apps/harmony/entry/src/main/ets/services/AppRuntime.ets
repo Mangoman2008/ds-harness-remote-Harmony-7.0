@@ -11,7 +11,8 @@ import { RemoteClientCore, RemoteClientError } from '../net/RemoteClientCore';
 import { RemoteGateway, RemoteGatewayError, RemoteHostFeatures } from '../net/RemoteGateway';
 import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRemoteSession,
   DirectoryEntry, HarnessSchedule, HarnessScheduleDelivery, HarnessSessionEvent, HarnessWorkspace,
-  HarnessWorkspaceSnapshot, HistoryPage, PromptImagePart } from '../net/HarnessClient';
+  HarnessWorkspaceSnapshot, HistoryPage, PromptImagePart, PromptFilePart } from '../net/HarnessClient';
+import { PickedFile } from './FilePicker';
 import { DeviceIdentity, TokenPair, RemoteHostDevice, AuthorizedPeerDevice, AccountLoginResult } from '../model/Types';
 import { asArray, asBool, asNum, asRecord, asStr, jsonStr, jsonNum } from '../protocol/Types';
 import { randomId } from '../crypto/Bytes';
@@ -98,8 +99,12 @@ export class ChatItem {
   noticeKind: string = '';
   /** notice 上的操作按钮要执行的斜杠命令（例如 '/compact'），空表示没有按钮。 */
   actionCommand: string = '';
+  /** 跨连接补发出来的审批：主机可能在断线期间已经作废，界面上要提前说一句。 */
+  staleHint: string = '';
   /** 用户消息里带的图片（标准 base64）；本地刚发的直接用，历史的按 attachmentId 拉。 */
   images: string[] = [];
+  /** 用户消息里附带的文件名（只用于气泡展示，字节已经上传成 receipt）。 */
+  fileNames: string[] = [];
   /** 历史图片的附件 id：拿到字节前先占位，下拉时逐张补。 */
   imageAttachmentIds: string[] = [];
   /**
@@ -2527,9 +2532,10 @@ export class AppRuntime {
     }
   }
 
-  async sendPrompt(text: string, images: PromptImagePart[] = []): Promise<void> {
+  async sendPrompt(text: string, images: PromptImagePart[] = [],
+    files: PromptFilePart[] = [], fileNames: string[] = []): Promise<void> {
     const trimmed: string = text.trim();
-    if (trimmed.length === 0 && images.length === 0) {
+    if (trimmed.length === 0 && images.length === 0 && files.length === 0) {
       return;
     }
     const harness: HarnessAlphaClient | undefined = this.harness;
@@ -2553,6 +2559,9 @@ export class AppRuntime {
       }
       item.images = previews;
     }
+    if (fileNames.length > 0) {
+      item.fileNames = fileNames.slice();
+    }
     const next: ChatItem[] = this.messages.slice();
     next.push(item);
     this.messages = next;
@@ -2568,7 +2577,7 @@ export class AppRuntime {
     this.notify();
     try {
       await harness.sessionPrompt(sessionId, trimmed, requestId,
-        this.steerMode ? 'steer' : 'queue', images);
+        this.steerMode ? 'steer' : 'queue', images, files);
       this.clearRetry();
     } catch (error) {
       this.errorMsg = errorMessage(error);
@@ -2709,6 +2718,20 @@ export class AppRuntime {
       this.errorMsg = errorMessage(error);
       this.notify();
     }
+  }
+
+  /** 把选好的文件交给主机暂存，拿到 prompt 用的 receipt。 */
+  async uploadFile(file: PickedFile): Promise<PromptFilePart> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    const sessionId: string = this.currentSessionId;
+    if (harness === undefined || sessionId.length === 0) {
+      throw new Error('还没连上会话');
+    }
+    const receiptId: string = await harness.sessionUploadFile(sessionId, file.base64, file.name);
+    const part: PromptFilePart = new PromptFilePart();
+    part.receiptId = receiptId;
+    part.name = file.name;
+    return part;
   }
 
   async respondApproval(item: ChatItem, allowed: boolean): Promise<void> {
@@ -4582,6 +4605,23 @@ export class AppRuntime {
    * 上游在 client-core 的 `republishPendingSessionInteractions` 里做的是同一件事；
    * 我们的重连会新建客户端实例，所以帧还额外存在这一层，避免断线期间到达的审批凭空消失。
    */
+  /** 本轮补发的帧里，哪些是断线前到的（主机很可能已经作废）。 */
+  private replayHints: Map<string, string> = new Map<string, string>();
+
+  /** 该会话里还没作答的审批/提问数量（会话列表的「待确认」角标用）。 */
+  pendingConfirmationCount(sessionId: string): number {
+    if (sessionId.length === 0) {
+      return 0;
+    }
+    let count: number = 0;
+    this.pendingInteractions.forEach((pending: PendingInteraction) => {
+      if (jsonStr(pending.frame.payload, 'sessionId', '') === sessionId) {
+        count += 1;
+      }
+    });
+    return count;
+  }
+
   private replayPendingInteractions(harness: HarnessAlphaClient, sessionId: string): void {
     if (sessionId.length === 0) {
       return;
@@ -4605,8 +4645,21 @@ export class AppRuntime {
     if (frames.length === 0) {
       return;
     }
+    this.replayHints.clear();
+    for (const frame of frames) {
+      const key: string = jsonStr(frame.payload, 'type', '') === 'question/requested'
+        ? frame.rpcId : jsonStr(frame.payload, 'approvalId', '');
+      if (key.length === 0) {
+        continue;
+      }
+      const pending: PendingInteraction | undefined = this.pendingInteractions.get(key);
+      if (pending !== undefined && this.connectedAt > 0 && pending.at < this.connectedAt) {
+        this.replayHints.set(key, '连接已重连，这条确认可能已失效');
+      }
+    }
     harness.restorePendingInteractions(frames);
     const count: number = harness.republishPendingSessionInteractions(sessionId);
+    this.replayHints.clear();
     logInfo('replay pending interactions session=' + sessionId + ' n=' + count);
   }
 
@@ -4628,7 +4681,10 @@ export class AppRuntime {
       this.publishAttentionNotice('需要确认',
         (jsonStr(payload, 'toolName', '工具') + ' 请求更高权限').slice(0, 60));
       if (matches) {
-        this.messages = addApproval(this.messages, payload, frame.rpcId);
+        const approvalKey: string = jsonStr(payload, 'approvalId', '');
+        const hintValue: string | undefined = this.replayHints.get(approvalKey);
+        const hint: string = hintValue !== undefined ? hintValue : '';
+        this.messages = addApproval(this.messages, payload, frame.rpcId, hint);
         this.notify();
       }
       return;
@@ -5404,7 +5460,8 @@ function applyToolEvent(items: ChatItem[], data: Record<string, Object>, time: n
   return next;
 }
 
-function addApproval(items: ChatItem[], payload: Record<string, Object>, frameRpcId: string): ChatItem[] {
+function addApproval(items: ChatItem[], payload: Record<string, Object>, frameRpcId: string,
+  staleHint: string = ''): ChatItem[] {
   const approvalId: string = jsonStr(payload, 'approvalId', '');
   if (approvalId.length === 0) {
     return items;
@@ -5422,6 +5479,7 @@ function addApproval(items: ChatItem[], payload: Record<string, Object>, frameRp
   created.sessionId = jsonStr(payload, 'sessionId', '');
   created.toolName = jsonStr(payload, 'toolName', 'Harness');
   created.reason = jsonStr(payload, 'reason', '');
+  created.staleHint = staleHint;
   created.frameRpcId = frameRpcId;
   created.timestamp = Date.now();
   const next: ChatItem[] = items.slice();

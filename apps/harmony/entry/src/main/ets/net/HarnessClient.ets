@@ -78,6 +78,11 @@ export class HarnessClientFrame {
 
 /** One native Harness session event. */
 /** prompt 里的一段图片：data 是标准 base64 的原始字节。 */
+export class PromptFilePart {
+  receiptId: string = '';
+  name: string = '';
+}
+
 export class PromptImagePart {
   mediaType: string = 'image/jpeg';
   base64: string = '';
@@ -234,9 +239,17 @@ export class HarnessAlphaClient {
    * mode='queue' 排在本轮之后，mode='steer' 立刻插话打断当前轮的下一步行动。
    */
   async sessionPrompt(sessionId: string, text: string, requestId: string,
-    mode: string = 'queue', images: PromptImagePart[] = []): Promise<void> {
-    // 顺序照 DSH：图片在前、文字在后；空文字时只发图片（协议要求 content 至少一项）
+    mode: string = 'queue', images: PromptImagePart[] = [],
+    files: PromptFilePart[] = []): Promise<void> {
+    // 顺序照 DSH：文件 → 图片 → 文字；空文字时只发附件（协议要求 content 至少一项）
     const content: Object[] = [];
+    for (const file of files) {
+      const part: Record<string, Object> = {
+        'type': 'file',
+        'receiptId': file.receiptId
+      };
+      content.push(part);
+    }
     for (const image of images) {
       const part: Record<string, Object> = {
         'type': 'image',
@@ -260,7 +273,7 @@ export class HarnessAlphaClient {
     };
     const args: Record<string, Object> = { 'request': request };
     logInfo('session/prompt -> ' + sessionId + ' len=' + text.length + ' images=' + images.length
-      + ' mode=' + mode + ' req=' + requestId);
+      + ' files=' + files.length + ' mode=' + mode + ' req=' + requestId);
     try {
       await this.callValue('session/prompt', args);
       logInfo('session/prompt ok -> ' + sessionId);
@@ -921,6 +934,26 @@ export class HarnessAlphaClient {
       page.throughSeq = cursorRaw;
     }
     return page;
+  }
+
+  /**
+   * 先把文件字节交给主机暂存，拿回 receiptId；prompt 里只放 `{type:'file', receiptId}`。
+   * 旧主机没有这个端点会直接报错，调用方负责提示「主机不支持文件上传」。
+   */
+  async sessionUploadFile(sessionId: string, base64: string, name: string): Promise<string> {
+    const request: Record<string, Object> = { 'data': base64 };
+    if (name.length > 0) {
+      request['name'] = name;
+    }
+    const args: Record<string, Object> = { 'agentId': sessionId, 'request': request };
+    const value: Object = await this.callValue('fileUploads/upload', args);
+    const root: Record<string, Object> | undefined = asRecord(value);
+    const receiptId: string = root !== undefined ? jsonStr(root, 'receiptId', '') : '';
+    if (receiptId.length === 0) {
+      throw new RemoteGatewayError('INVALID_MESSAGE', '主机没有返回文件回执');
+    }
+    logInfo('fileUploads/upload ok name=' + name + ' bytes=' + base64.length);
+    return receiptId;
   }
 
   /** Answer an `approval/requested` frame ('allowed-once' | 'rejected'). */

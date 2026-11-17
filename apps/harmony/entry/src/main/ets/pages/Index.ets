@@ -22,8 +22,9 @@ import {
   isCompactWidth, isExpandedWidth, mascotVisible
 } from '../services/Adaptive';
 import { PickedImage, compressPixelMap, pickImages } from '../services/ImagePicker';
+import { MAX_FILE_BYTES, PickedFile, pickFiles } from '../services/FilePicker';
 import { SavedProfile } from '../services/SecureStore';
-import { PromptImagePart } from '../net/HarnessClient';
+import { PromptFilePart, PromptImagePart } from '../net/HarnessClient';
 import { RtcBridge } from '../services/RtcBridge';
 import { heartbeatBodyOf } from '../services/Heartbeat';
 import { image } from '@kit.ImageKit';
@@ -129,6 +130,9 @@ struct Index {
   @State connectedTransport: string = '';
   /** 已选好、还没发出去的图片。 */
   @State pendingImages: PickedImage[] = [];
+  /** 已上传到主机、等着随这条消息发出去的文件（receiptId 已经拿到）。 */
+  @State pendingFiles: PromptFilePart[] = [];
+  @State pickingFile: boolean = false;
   /** 正在取图/压缩。 */
   @State pickingImages: boolean = false;
   @State connectStage: string = '';
@@ -814,6 +818,39 @@ struct Index {
     return position + '/' + turns.length + (summary.length > 0 ? ' · ' + summary : '');
   }
 
+  /** 选文件 → 上传拿回执 → 挂到待发列表（失败要说清楚，不能静默丢掉）。 */
+  private attachFile(): Promise<void> {
+    if (this.pickingFile) {
+      return Promise.resolve();
+    }
+    this.pickingFile = true;
+    return pickFiles(1).then((files: PickedFile[]) => {
+      this.pickingFile = false;
+      if (files.length === 0) {
+        return;
+      }
+      const file: PickedFile = files[0];
+      if (file.bytes > MAX_FILE_BYTES) {
+        promptAction.showToast({ message: this.tr('文件超过 2.5MB，暂时发不了') });
+        return;
+      }
+      this.runtime.uploadFile(file).then((part: PromptFilePart) => {
+        this.pendingFiles = this.pendingFiles.concat([part]);
+      }).catch((error: Error) => {
+        this.errorMsg = this.tr('文件上传失败：') + error.message;
+        promptAction.showToast({ message: this.tr('文件上传失败') });
+      });
+    }).catch(() => {
+      this.pickingFile = false;
+    });
+  }
+
+  private removePendingFile(index: number): void {
+    const next: PromptFilePart[] = this.pendingFiles.slice();
+    next.splice(index, 1);
+    this.pendingFiles = next;
+  }
+
   private sendTap(): void {
     if (this.reconnecting) {
       promptAction.showToast({ message: this.tr('正在重连，连上后再发') });
@@ -821,11 +858,13 @@ struct Index {
     }
     const text: string = this.promptInput;
     const picked: PickedImage[] = this.pendingImages;
-    if (text.trim().length === 0 && picked.length === 0) {
+    const files: PromptFilePart[] = this.pendingFiles;
+    if (text.trim().length === 0 && picked.length === 0 && files.length === 0) {
       return;
     }
     this.promptInput = '';
     this.pendingImages = [];
+    this.pendingFiles = [];
     const parts: PromptImagePart[] = [];
     for (const image of picked) {
       const part: PromptImagePart = new PromptImagePart();
@@ -836,7 +875,11 @@ struct Index {
     }
     // 发出去就把草稿清掉：onChange 不会因为代码里清空而触发，不清的话切回来还是这段文字
     this.runtime.saveDraft(this.currentSessionId, '');
-    this.runtime.sendPrompt(text, parts);
+    const fileNames: string[] = [];
+    for (const file of files) {
+      fileNames.push(file.name);
+    }
+    this.runtime.sendPrompt(text, parts, files, fileNames);
     // 发送后输入框会从多行缩回单行、坞跟着变矮。必须等这一帧布局落定再滚，
     // 否则滚动是按旧高度算的，收回去之后新消息就矮到坞后面去了。
     this.stickToBottom = true;
@@ -5244,6 +5287,33 @@ struct Index {
           .width('100%')
           .padding({ top: 4, bottom: 2 })
         }
+        if (this.pendingFiles.length > 0) {
+          Row({ space: 8 }) {
+            ForEach(this.pendingFiles, (file: PromptFilePart, index: number) => {
+              Row({ space: 6 }) {
+                Text('📄')
+                  .fontSize(this.fs(12))
+                Text(file.name)
+                  .fontSize(this.fs(11))
+                  .fontColor(this.pal().text2)
+                  .maxLines(1)
+                  .constraintSize({ maxWidth: 140 })
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                Text('✕')
+                  .fontSize(this.fs(11))
+                  .fontColor(this.pal().text3)
+                  .onClick(() => {
+                    this.removePendingFile(index);
+                  })
+              }
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .backgroundColor(this.pal().inputBg)
+              .borderRadius(10)
+            }, (file: PromptFilePart, index: number) => `${file.receiptId}#${index}`)
+          }
+          .width('100%')
+          .padding({ left: 16, right: 16, top: 2, bottom: 2 })
+        }
         if (this.pendingImages.length > 0) {
           Scroll() {
             Row({ space: 8 }) {
@@ -5330,6 +5400,28 @@ struct Index {
           })
           .onClick(() => {
             this.attachImage();
+          })
+          // 文件键：和图片键同规格，左边再挂一枚
+          Row() {
+            Text('📄')
+              .fontSize(this.fs(14))
+              .fontColor(this.pal().text2)
+          }
+          .width(this.compactDock() ? 30 : 34)
+          .height(this.compactDock() ? 40 : 46)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .borderRadius(this.compactDock() ? 20 : 23)
+          .backgroundColor(this.isDarkUi ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.40)')
+          .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+            colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+            adaptiveColor: AdaptiveColor.DEFAULT,
+            blurOptions: { grayscale: [0, 12] }
+          })
+          .border({ width: 1,
+            color: this.isDarkUi ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.95)' })
+          .onClick(() => {
+            this.attachFile();
           })
           // 提示词库入口：和图片键同规格的小圆玻璃
           Row() {
@@ -5891,6 +5983,14 @@ struct Index {
                       .backgroundColor('rgba(240,160,32,0.14)')
                       .borderRadius(5)
                   }
+                  if (this.runtime.pendingConfirmationCount(session.sessionId) > 0) {
+                    Text('待确认 ' + this.runtime.pendingConfirmationCount(session.sessionId))
+                      .fontSize(this.fs(9))
+                      .fontColor('#F5A623')
+                      .padding({ left: 5, right: 5, top: 1, bottom: 1 })
+                      .backgroundColor('rgba(245,166,35,0.16)')
+                      .borderRadius(5)
+                  }
                   if (session.running) {
                     Row({ space: 3 }) {
                       Column()
@@ -5977,7 +6077,8 @@ struct Index {
             .width('100%')
             .alignItems(HorizontalAlign.Start)
           }
-        }, (session: HarnessRemoteSession) => `${session.sessionId}#${this.languageMode}`)
+        }, (session: HarnessRemoteSession) =>
+          `${session.sessionId}#${this.languageMode}#${this.runtime.pendingConfirmationCount(session.sessionId)}`)
       }
       .layoutWeight(1)
       .width('100%')
@@ -9248,6 +9349,12 @@ struct Index {
         Text(item.reason)
           .fontSize(12)
           .fontColor(this.pal().text2)
+          .textAlign(TextAlign.Start)
+      }
+      if (item.staleHint.length > 0 && item.approvalOutcome.length === 0) {
+        Text(item.staleHint)
+          .fontSize(11)
+          .fontColor('#F5A623')
           .textAlign(TextAlign.Start)
       }
       if (item.approvalOutcome.length === 0) {

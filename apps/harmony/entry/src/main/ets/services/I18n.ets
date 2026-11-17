@@ -278,6 +278,9 @@ function buildEnglish(): Map<string, string> {
   map.set('有 ', 'Has ');
   map.set('标准', 'Standard');
   map.set('桌宠', 'Desk pet');
+  map.set('文件上传失败', 'File upload failed');
+  map.set('文件上传失败：', 'File upload failed: ');
+  map.set('文件超过 2.5MB，暂时发不了', 'File is over 2.5 MB and cannot be sent yet');
   map.set('森林', 'Forest');
   map.set('深海', 'Deep sea');
   map.set('添加', 'Add');

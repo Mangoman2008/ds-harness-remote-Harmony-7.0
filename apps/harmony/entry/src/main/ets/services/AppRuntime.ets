@@ -1211,6 +1211,29 @@ export class AppRuntime {
     }
   }
 
+  /**
+   * 需要用户动手的交互（审批 / 提问）在后台到达时提醒一次。
+   * 这类卡片只在会话里可见，App 切到后台就完全静默 —— 用户回来只看到「没有反应」。
+   */
+  private publishAttentionNotice(title: string, text: string): void {
+    if (!this.notificationsEnabled || !this.appBackground) {
+      return;
+    }
+    const request: notificationManager.NotificationRequest = {
+      id: 102,
+      content: {
+        notificationContentType: notificationManager.ContentType.NOTIFICATION_CONTENT_BASIC_TEXT,
+        normal: {
+          title: title,
+          text: text
+        }
+      }
+    };
+    notificationManager.publish(request).catch((error: Error) => {
+      logWarn('publish attention notification failed');
+    });
+  }
+
   /** 发一条完成通知；App 在前台或开关关闭时什么也不做。 */
   private publishCompletionNotice(title: string, text: string): void {
     if (!this.notificationsEnabled || !this.appBackground) {
@@ -4602,6 +4625,8 @@ export class AppRuntime {
       logInfo('approval/requested id=' + jsonStr(payload, 'approvalId', '')
         + ' 当前会话=' + (matches ? '是' : '否（先暂存）'));
       this.rememberInteraction(jsonStr(payload, 'approvalId', ''), frame);
+      this.publishAttentionNotice('需要确认',
+        (jsonStr(payload, 'toolName', '工具') + ' 请求更高权限').slice(0, 60));
       if (matches) {
         this.messages = addApproval(this.messages, payload, frame.rpcId);
         this.notify();
@@ -4617,6 +4642,7 @@ export class AppRuntime {
     if (type === 'question/requested') {
       const sessionId: string = jsonStr(payload, 'sessionId', '');
       this.rememberInteraction(frame.rpcId, frame);
+      this.publishAttentionNotice('需要回答', '主机在等你的选择');
       if (sessionId.length === 0 || sessionId === this.currentSessionId) {
         this.messages = addQuestion(this.messages, payload, frame.rpcId);
         this.notify();

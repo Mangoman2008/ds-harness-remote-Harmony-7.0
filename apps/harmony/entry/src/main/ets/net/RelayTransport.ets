@@ -785,6 +785,7 @@ export class RelayTransport {
       logWarn('webrtc: DataChannel 已关闭（transport=' + this.transportKind() + '）');
       if (this.dataMode === 'lan') {
         // 直连数据面没了就是没了：立刻判死走重连，别等 35 秒的静默探测
+        this.coolDownLanAfterDrop();
         this.failStale('直连数据通道已关闭');
       }
     };
@@ -805,6 +806,7 @@ export class RelayTransport {
       if (this.dataMode === 'lan') {
         // 直连已经在用的时候报错，说明这条数据面基本废了：
         // 立刻按「链路不可用」判死，走已验证的自动重连，别让用户对着一个假连接发呆。
+        this.coolDownLanAfterDrop();
         this.failStale('直连数据通道出错：' + message);
         return;
       }
@@ -834,6 +836,19 @@ export class RelayTransport {
   }
 
   /** WebRTC 没谈成：关掉 peer，回到中继数据面。 */
+  /**
+   * 已经建好的直连数据面断了：下一次重连先别再试直连。
+   * 不这么做的话，上层自动重连会立刻又选直连、又失败，看起来就是「第 1/6 次之后卡住」——
+   * 而中继本来就能用，先回落写一条能通的路，比反复撞同一堵墙强。
+   */
+  private coolDownLanAfterDrop(): void {
+    lanFailureStreak += 1;
+    const cooldownMs: number = lanFailureStreak >= 2 ? 10 * 60 * 1000 : 60 * 1000;
+    lanCooldownUntil = Date.now() + cooldownMs;
+    logWarn('webrtc: 直连数据面断开（连续 ' + lanFailureStreak + ' 次），'
+      + Math.round(cooldownMs / 1000) + ' 秒内重连先走中继');
+  }
+
   private fallBackToRelay(reason: string): void {
     if (this.dataMode === 'lan' || this.notifiedClosed) {
       return;

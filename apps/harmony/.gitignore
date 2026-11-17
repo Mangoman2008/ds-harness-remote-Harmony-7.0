@@ -16,7 +16,9 @@
 /release/
 .DS_Store
 .crypto-bundle.mjs
+.hostcompat-bundle.mjs
 .crypto-entry.ts
+.hostcompat-entry.ts
 .build-profile.tracked.json5
 
 # 桌宠素材（使用者自备，不进仓库）

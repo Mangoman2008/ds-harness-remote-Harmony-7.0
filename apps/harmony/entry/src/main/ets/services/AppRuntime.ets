@@ -4717,7 +4717,9 @@ export class AppRuntime {
       this.rememberInteraction(frame.rpcId, frame);
       this.publishAttentionNotice('需要回答', '主机在等你的选择');
       if (sessionId.length === 0 || sessionId === this.currentSessionId) {
-        this.messages = addQuestion(this.messages, payload, frame.rpcId);
+        const questionHintValue: string | undefined = this.replayHints.get(frame.rpcId);
+        const questionHint: string = questionHintValue !== undefined ? questionHintValue : '';
+        this.messages = addQuestion(this.messages, payload, frame.rpcId, questionHint);
         this.notify();
       }
       return;
@@ -5525,7 +5527,8 @@ function resolveApproval(items: ChatItem[], payload: Record<string, Object>): Ch
   return changed ? next : items;
 }
 
-function addQuestion(items: ChatItem[], payload: Record<string, Object>, frameRpcId: string): ChatItem[] {
+function addQuestion(items: ChatItem[], payload: Record<string, Object>, frameRpcId: string,
+  staleHint: string = ''): ChatItem[] {
   const sessionId: string = jsonStr(payload, 'sessionId', '');
   const rawQuestions: Object[] | undefined = asArray(payload['questions']);
   if (sessionId.length === 0 || rawQuestions === undefined || rawQuestions.length === 0) {
@@ -5578,6 +5581,7 @@ function addQuestion(items: ChatItem[], payload: Record<string, Object>, frameRp
   created.id = id;
   created.kind = 'question';
   created.sessionId = sessionId;
+  created.staleHint = staleHint;
   created.frameRpcId = frameRpcId;
   created.questions = questions;
   created.timestamp = Date.now();

@@ -9455,6 +9455,12 @@ struct Index {
         .width('100%')
         .alignItems(HorizontalAlign.Start)
       }, (question: ChatQuestion) => question.id)
+      if (item.staleHint.length > 0 && item.questionOutcome.length === 0) {
+        Text(item.staleHint)
+          .fontSize(11)
+          .fontColor('#F5A623')
+          .textAlign(TextAlign.Start)
+      }
       if (item.questionOutcome.length === 0) {
         Button(this.tr('提交回答'))
           .width('100%')

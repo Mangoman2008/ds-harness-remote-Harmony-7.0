@@ -104,6 +104,7 @@ jobs:
           pnpm exec vitest run apps/harmony/tests
           node apps/harmony/scripts/check-i18n.mjs
           node apps/harmony/scripts/bump-version.mjs --check
+          node apps/harmony/scripts/check-release-safety.mjs
 
       # Android prebuild recompiles shared packages. Serialize workspace builds
       # so Plugin bundling cannot read dist files while tsc rewrites them.

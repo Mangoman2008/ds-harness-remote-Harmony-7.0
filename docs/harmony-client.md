@@ -54,7 +54,12 @@ git restore build-profile.json5
 pnpm exec vitest run apps/harmony/tests
 node apps/harmony/scripts/check-i18n.mjs
 node apps/harmony/scripts/bump-version.mjs --check
+node apps/harmony/scripts/check-release-safety.mjs
 ```
+
+`check-release-safety.mjs` 有两件事：仓库不许跟踪桌宠素材、签名材料与本机配置；有构建产物时，
+包内 `versionName`/`versionCode` 必须与 `AppScope/app.json5` 一致（改完代码忘了 bump 或忘了重建，
+装上去才发现版本号是旧的）。没有产物时自动跳过后半段，CI 里跑的是前半段。
 
 Node 测试用 shim 替代鸿蒙 Kit，验证共享 Noise 金标向量及安全存储失败路径；它不验证 ArkTS 编译、系统 Kit、ArkWeb 或设备生命周期。原生构建和设备侧测试必须用 SDK 独立执行。
 

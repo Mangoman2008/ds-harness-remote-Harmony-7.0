@@ -81,6 +81,8 @@ export class HarnessClientFrame {
 export class PromptFilePart {
   receiptId: string = '';
   name: string = '';
+  /** 原始字节数（只用于界面显示大小，不进协议）。 */
+  bytes: number = 0;
 }
 
 export class PromptImagePart {

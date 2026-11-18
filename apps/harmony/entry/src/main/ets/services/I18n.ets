@@ -236,6 +236,7 @@ function buildEnglish(): Map<string, string> {
 
   // —— 诊断导出（0.17.97）——
   map.set('存文件', 'Save to file');
+  map.set('合计', 'Total');
   map.set('自检', 'Self-check');
   map.set('自检结果', 'Self-check result');
   map.set('自检失败：读不到运行时状态', 'Self-check failed: runtime state unavailable');

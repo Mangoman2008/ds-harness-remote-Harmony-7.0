@@ -2842,6 +2842,7 @@ export class AppRuntime {
     const part: PromptFilePart = new PromptFilePart();
     part.receiptId = receiptId;
     part.name = file.name;
+    part.bytes = file.bytes;
     return part;
   }
 

@@ -875,6 +875,15 @@ struct Index {
     });
   }
 
+  /** 待发文件总大小（只算上传成功的，0 表示未知）。 */
+  private pendingFilesTotalBytes(): number {
+    let total: number = 0;
+    for (const file of this.pendingFiles) {
+      total += file.bytes;
+    }
+    return total;
+  }
+
   private removePendingFile(index: number): void {
     const next: PromptFilePart[] = this.pendingFiles.slice();
     next.splice(index, 1);
@@ -5335,11 +5344,11 @@ struct Index {
               Row({ space: 6 }) {
                 Text('📄')
                   .fontSize(this.fs(12))
-                Text(file.name)
+                Text(file.bytes > 0 ? file.name + ' · ' + sizeLabel(file.bytes) : file.name)
                   .fontSize(this.fs(11))
                   .fontColor(this.pal().text2)
                   .maxLines(1)
-                  .constraintSize({ maxWidth: 140 })
+                  .constraintSize({ maxWidth: 170 })
                   .textOverflow({ overflow: TextOverflow.Ellipsis })
                 Text('✕')
                   .fontSize(this.fs(11))
@@ -5352,6 +5361,11 @@ struct Index {
               .backgroundColor(this.pal().inputBg)
               .borderRadius(10)
             }, (file: PromptFilePart, index: number) => `${file.receiptId}#${index}`)
+            if (this.pendingFiles.length > 1) {
+              Text(this.tr('合计') + ' ' + sizeLabel(this.pendingFilesTotalBytes()))
+                .fontSize(this.fs(10))
+                .fontColor(this.pal().text3)
+            }
           }
           .width('100%')
           .padding({ left: 16, right: 16, top: 2, bottom: 2 })
@@ -9884,6 +9898,20 @@ function cwdTail(cwd: string): string {
   const trimmed: string = cwd.endsWith('/') ? cwd.substring(0, cwd.length - 1) : cwd;
   const cut: number = trimmed.lastIndexOf('/');
   return cut >= 0 ? trimmed.substring(cut + 1) : trimmed;
+}
+
+/** 文件大小文案：留一位小数，KB 以下按 B 显示。 */
+function sizeLabel(bytes: number): string {
+  if (bytes <= 0) {
+    return '';
+  }
+  if (bytes < 1024) {
+    return bytes + ' B';
+  }
+  if (bytes < 1024 * 1024) {
+    return Math.round(bytes / 102.4) / 10 + ' KB';
+  }
+  return Math.round(bytes / 1024 / 102.4) / 10 + ' MB';
 }
 
 function waitLabel(since: number, english: boolean): string {

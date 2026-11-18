@@ -4466,7 +4466,31 @@ export class AppRuntime {
       + (this.lastRecoveryMs > 0 ? ' · 上次恢复 ' + (Math.round(this.lastRecoveryMs / 100) / 10) + 's' : ''));
     rows.push('日志：' + (LinkLog.pathText().length > 0 ? 'link.log（已落盘，重启也保留）' : '未启用'));
     rows.push('会话：' + (this.currentSessionId.length > 0 ? this.currentSessionId : '—'));
+    // 「点了没反应」这类反馈，先看客户端自己认为还有几条待答：数量、等了多久、是不是跨连接补发的。
+    rows.push('待确认：' + this.pendingInteractionsSummary());
     return rows;
+  }
+
+  /** 待答交互的一句话摘要：没有就写「无」，有就把每条的时间与来源标出来。 */
+  private pendingInteractionsSummary(): string {
+    if (this.pendingInteractions.size === 0) {
+      return '无';
+    }
+    const now: number = Date.now();
+    const parts: string[] = [];
+    this.pendingInteractions.forEach((pending: PendingInteraction, key: string) => {
+      if (parts.length >= 4) {
+        return;
+      }
+      const kind: string = jsonStr(pending.frame.payload, 'type', '') === 'question/requested' ? '提问' : '审批';
+      const verdict: ReplayVerdict = classifyPending(pending.at, this.connectedAt, now, PENDING_INTERACTION_TTL_MS);
+      const waited: number = Math.max(0, Math.round((now - pending.at) / 1000));
+      const waitedText: string = waited < 60 ? waited + ' 秒' : Math.round(waited / 60) + ' 分';
+      const tag: string = verdict.crossConnection ? ' · 跨连接' : '';
+      parts.push(kind + ' ' + key.slice(0, 8) + ' · 已等 ' + waitedText + tag);
+    });
+    const more: number = this.pendingInteractions.size - parts.length;
+    return this.pendingInteractions.size + ' 条（' + parts.join('；') + (more > 0 ? '；另 ' + more + ' 条' : '') + '）';
   }
 
   /**

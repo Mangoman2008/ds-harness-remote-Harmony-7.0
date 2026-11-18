@@ -14,6 +14,7 @@ import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRem
   DirectoryEntry, HarnessSchedule, HarnessScheduleDelivery, HarnessSessionEvent, HarnessWorkspace,
   HarnessWorkspaceSnapshot, HistoryPage, PromptImagePart, PromptFilePart } from '../net/HarnessClient';
 import { PickedFile } from './FilePicker';
+import { explainError, ErrorExplanation } from './ErrorText';
 import { ReplayVerdict, classifyPending } from './ReplayPolicy';
 import { DeviceIdentity, TokenPair, RemoteHostDevice, AuthorizedPeerDevice, AccountLoginResult } from '../model/Types';
 import { asArray, asBool, asNum, asRecord, asStr, jsonStr, jsonNum } from '../protocol/Types';
@@ -2808,13 +2809,10 @@ export class AppRuntime {
     try {
       receiptId = await harness.sessionUploadFile(sessionId, file.base64, file.name);
     } catch (error) {
-      const detail: string = errorMessage(error);
-      // 主机侧 allowlist 是 0.6.5 才加入 fileUploads/upload 的：旧主机只会回「endpoint not allowed」，
-      // 直接把这句网关话翻译成用户能行动的提示，别让他对着英文发愣。
-      if (detail.indexOf('not allowed') >= 0 || detail.indexOf('notallowed') >= 0) {
-        throw new Error('主机插件太旧，暂不支持文件上传（把 Host 端升级到 0.6.5 以上即可）');
-      }
-      throw new Error(detail);
+      // 主机侧 allowlist 是 0.6.5 才加入 fileUploads/upload 的：旧主机只会回「endpoint not allowed」。
+      // 统一走 ErrorText 的规则，别让用户对着网关英文发愣。
+      const explained: ErrorExplanation = explainError(errorMessage(error));
+      throw new Error(explained.text);
     }
     const part: PromptFilePart = new PromptFilePart();
     part.receiptId = receiptId;

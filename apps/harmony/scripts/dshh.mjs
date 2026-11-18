@@ -494,6 +494,24 @@ function cmdDoctor() {
   return 1;
 }
 
+/** Node 侧用例。本机 pnpm 在鸿蒙上缺原生二进制，会失败；失败时把原因说清楚，别让人以为是用例挂了。 */
+function cmdTest() {
+  const pnpm = succeed('sh', ['-c', 'command -v pnpm']);
+  if (!pnpm) {
+    warn('没有 pnpm，跑不了 vitest。到 CI 或装好 pnpm 的机器上执行：');
+    say('    pnpm exec vitest run apps/harmony/tests');
+    return 1;
+  }
+  const result = run('pnpm', ['exec', 'vitest', 'run', 'apps/harmony/tests']);
+  if (result.code !== 0) {
+    bad('vitest 未通过。若不是断言失败（本机缺原生二进制会报 ERR_DLOPEN_FAILED / PNPM_ENGINE_NO_NATIVE_BINARY），');
+    say('    那是环境问题，不是用例问题；CI 里会真跑。');
+    return 1;
+  }
+  ok('用例通过');
+  return 0;
+}
+
 function cmdRelease(argv) {
   const forwarded = argv.filter((arg) => arg !== '--');
   const result = run(process.execPath, [join(APP_DIR, 'scripts/release.mjs'), ...forwarded]);
@@ -522,6 +540,7 @@ const HELP = `鸿蒙客户端工程命令行
   dshh logs    [-f] [--lines N] [--tag T]   看 hilog（默认 40 行）
   dshh shot    [-o 文件] [--pc|--phone]     截图并拉到本机
   dshh smoke   [--pc|--phone] [--wait 秒]   完整冒烟（构建→装机→拉起→判定）
+  dshh test                                 Node 侧用例（vitest；本机跑不了时说明原因）
   dshh verify                               全部门禁：i18n / 版本 / 发包安全
   dshh version                              仓库版本、产物版本、各设备已装版本
   dshh doctor                               环境体检（工具链/签名/设备/一致性/文件系统/缓存/插件补丁）
@@ -544,6 +563,7 @@ function main(argv) {
     case 'logs': return cmdLogs(rest);
     case 'shot': return cmdShot(rest);
     case 'smoke': return cmdSmoke(rest);
+    case 'test': return cmdTest();
     case 'verify': return cmdVerify();
     case 'version': return cmdVersion();
     case 'doctor': return cmdDoctor();

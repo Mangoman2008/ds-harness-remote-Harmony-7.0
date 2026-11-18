@@ -623,6 +623,11 @@ struct Index {
 
   private syncFromRuntime(): void {
     this.syncWaitTimer();
+    // 从通知点进来的话，运行时里存着要打开的会话；等界面同步完再切，避免和 follow 抢
+    const wanted: string = this.runtime.consumePendingOpenSession();
+    if (wanted.length > 0 && wanted !== this.currentSessionId) {
+      this.runtime.openSession(wanted).catch(() => undefined);
+    }
     this.uiShowInspector = this.runtime.showInspector;
     this.uiPetEnabled = this.runtime.petEnabled;
     this.uiThemeTint = this.runtime.themeTint;

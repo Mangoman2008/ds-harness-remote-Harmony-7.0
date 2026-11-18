@@ -381,6 +381,8 @@ export class AppRuntime {
   notificationStateChecked: boolean = false;
   /** 上一次通知发布失败的错误码（'' = 没失败过）。 */
   notificationLastError: string = '';
+  /** 通知点进来要打开的会话：EntryAbility 拿到 want 参数先放这儿，界面切过去后清掉。 */
+  private pendingOpenSessionId: string = '';
   appBackground: boolean = false;
   /** 系统网络是否可用（断网时立刻把 UI 变灰，而不是等 socket 自己断）。 */
   networkOnline: boolean = true;
@@ -1251,7 +1253,7 @@ export class AppRuntime {
    * 这类卡片只在会话里可见，App 切到后台就完全静默 —— 用户回来只看到「没有反应」。
    * key 用于去重：重连补发会重放同一条审批，重复弹通知只会打扰人。
    */
-  private publishAttentionNotice(title: string, text: string, key: string): void {
+  private publishAttentionNotice(title: string, text: string, key: string, sessionId: string = ''): void {
     if (!this.notificationsEnabled || !this.appBackground) {
       return;
     }
@@ -1276,7 +1278,9 @@ export class AppRuntime {
     wantAgent.getWantAgent({
       wants: [{
         bundleName: 'cn.r2049.dshremote',
-        abilityName: 'EntryAbility'
+        abilityName: 'EntryAbility',
+        // 带上会话 id：点通知直接落到那条审批所在的会话，而不是回到上次停留的地方。
+        parameters: { 'sessionId': sessionId }
       }],
       actionType: wantAgent.OperationType.START_ABILITY,
       requestCode: 102,
@@ -4741,6 +4745,22 @@ export class AppRuntime {
   /** 本轮补发的帧里，哪些是断线前到的（主机很可能已经作废）。 */
   private replayHints: Map<string, string> = new Map<string, string>();
 
+  /** 通知点击带过来的会话 id：界面把它切过去之后再清空。 */
+  requestOpenSession(sessionId: string): void {
+    if (sessionId.length === 0) {
+      return;
+    }
+    this.pendingOpenSessionId = sessionId;
+    this.notify();
+  }
+
+  /** 取一次待打开的会话（取完即清，避免重复跳转）。 */
+  consumePendingOpenSession(): string {
+    const id: string = this.pendingOpenSessionId;
+    this.pendingOpenSessionId = '';
+    return id;
+  }
+
   /** 所有会话里还没作答的审批/提问总数（界面据此决定要不要刷新等待时长）。 */
   pendingInteractionCount(): number {
     return this.pendingInteractions.size;
@@ -4828,7 +4848,7 @@ export class AppRuntime {
       this.rememberInteraction(jsonStr(payload, 'approvalId', ''), frame);
       this.publishAttentionNotice('需要确认',
         (jsonStr(payload, 'toolName', '工具') + ' 请求更高权限').slice(0, 60),
-        jsonStr(payload, 'approvalId', ''));
+        jsonStr(payload, 'approvalId', ''), sessionId);
       if (matches) {
         const approvalKey: string = jsonStr(payload, 'approvalId', '');
         const hintValue: string | undefined = this.replayHints.get(approvalKey);
@@ -4847,7 +4867,7 @@ export class AppRuntime {
     if (type === 'question/requested') {
       const sessionId: string = jsonStr(payload, 'sessionId', '');
       this.rememberInteraction(frame.rpcId, frame);
-      this.publishAttentionNotice('需要回答', '主机在等你的选择', frame.rpcId);
+      this.publishAttentionNotice('需要回答', '主机在等你的选择', frame.rpcId, sessionId);
       if (sessionId.length === 0 || sessionId === this.currentSessionId) {
         const questionHintValue: string | undefined = this.replayHints.get(frame.rpcId);
         const questionHint: string = questionHintValue !== undefined ? questionHintValue : '';

@@ -22,7 +22,32 @@ export default class EntryAbility extends UIAbility {
     const runtime = getAppRuntime();
     runtime.setSystemDark(this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK);
     runtime.setSystemLandscape(this.context.config.direction === ConfigurationConstant.Direction.DIRECTION_HORIZONTAL);
+    this.consumeAttentionWant(want);
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onCreate');
+  }
+
+  /**
+   * 点「需要确认 / 需要回答」通知会把 App 拉起来：want 里带着会话 id，
+   * 交给运行时在界面就绪后切过去（不在这里直接切，页面可能还没加载完）。
+   */
+  onNewWant(want: Want, launchParam: AbilityConstant.LaunchParam): void {
+    this.consumeAttentionWant(want);
+  }
+
+  private consumeAttentionWant(want: Want): void {
+    const params: Record<string, Object> | undefined = want.parameters;
+    if (params === undefined) {
+      return;
+    }
+    const raw: Object | undefined = params['sessionId'];
+    if (raw === undefined || raw === null) {
+      return;
+    }
+    const sessionId: string = String(raw);
+    if (sessionId.length === 0) {
+      return;
+    }
+    getAppRuntime().requestOpenSession(sessionId);
   }
 
   onDestroy(): void {

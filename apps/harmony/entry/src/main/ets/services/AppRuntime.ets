@@ -1,7 +1,7 @@
 import { common, WantAgent, wantAgent } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { SecureStore, StoredServerConfig, SavedProfile } from './SecureStore';
 import { RemoteServerApi, RemoteApiError, normalizeServerUrl, websocketUrl, QrLoginSession, QrLoginPoll,
@@ -284,6 +284,8 @@ export class AppRuntime {
   /** 稳定性统计（诊断面板 + 落盘日志用）。 */
   private connectCount: number = 0;
   private disconnectCount: number = 0;
+  /** 断线原因归类（'link-silent' / '4003' / 'unknown'…），诊断里直接看哪类最多。 */
+  private disconnectReasons: Map<string, number> = new Map<string, number>();
   private connectedAt: number = 0;
   private lastDisconnectAt: number = 0;
   private lastRecoveryMs: number = -1;
@@ -3831,6 +3833,9 @@ export class AppRuntime {
       ? this.activeRelay.closeVerdict : undefined;
     this.disconnectCount += 1;
     this.lastDisconnectAt = Date.now();
+    const reasonKey: string = verdict !== undefined && verdict.reason.length > 0
+      ? verdict.reason : ('code-' + (verdict !== undefined ? verdict.code : -1));
+    this.disconnectReasons.set(reasonKey, (this.disconnectReasons.get(reasonKey) ?? 0) + 1);
     const uptimeMs: number = this.connectedAt > 0 ? this.lastDisconnectAt - this.connectedAt : -1;
     const relayNow: RelayTransport | undefined = this.activeRelay;
     const silenceNow: number = relayNow !== undefined ? relayNow.linkSilenceMs() : -1;
@@ -4520,6 +4525,7 @@ export class AppRuntime {
       ? (Math.round((Date.now() - this.connectedAt) / 1000) + ' 秒')
       : '—';
     rows.push('保活：' + (KeepAlive.isRunning() ? '已开启（长时任务，熄屏不冻结）' : '未开启（后台可能被冻结）'));
+    rows.push('断线原因：' + this.disconnectReasonSummary());
     rows.push('稳定：连接 ' + this.connectCount + ' 次 · 断线 ' + this.disconnectCount
       + ' 次 · 本次已在线 ' + uptime
       + (this.lastRecoveryMs > 0 ? ' · 上次恢复 ' + (Math.round(this.lastRecoveryMs / 100) / 10) + 's' : ''));
@@ -4594,6 +4600,18 @@ export class AppRuntime {
     return lines;
   }
 
+  /** 断线原因按次数排序，最多列三类；没有断线就说「无」。 */
+  private disconnectReasonSummary(): string {
+    if (this.disconnectReasons.size === 0) {
+      return '无（本次运行还没断过）';
+    }
+    const entries: string[] = [];
+    this.disconnectReasons.forEach((count: number, reason: string) => {
+      entries.push(reason + ' ×' + count);
+    });
+    return entries.join(' · ');
+  }
+
   /** 通知状态的一句话：用户开关 / 系统开关 / 上次发布失败码，三者分开说。 */
   private notificationSummary(): string {
     const parts: string[] = [];
@@ -4646,6 +4664,15 @@ export class AppRuntime {
     const path: string = this.filesDir + '/' + name;
     const lines: string[] = [];
     lines.push('# DSH 远程 诊断导出（' + stamp.toLocaleString() + '）');
+    lines.push('');
+    // 复现问题最先被问到的就是「哪个版本、什么设备」：先写死这段，别让人再补问一轮。
+    lines.push('## 构建与设备');
+    lines.push('客户端: ' + clientVersion() + '（versionCode 见安装包）');
+    lines.push('主机: ' + this.connectedHostDisplayName() + ' · harness ' + (this.connectedHostHarness.length > 0 ? this.connectedHostHarness : '—')
+      + ' · 插件 ' + (this.connectedHostClient.length > 0 ? this.connectedHostClient : '—'));
+    lines.push('系统: ' + deviceInfo.osFullName + ' · API ' + deviceInfo.sdkApiVersion
+      + ' · 机型 ' + deviceInfo.marketName);
+    lines.push('传输: ' + (this.transportLabel.length > 0 ? this.transportLabel : '—'));
     lines.push('');
     for (const row of this.diagnosticsLines()) {
       lines.push(row);

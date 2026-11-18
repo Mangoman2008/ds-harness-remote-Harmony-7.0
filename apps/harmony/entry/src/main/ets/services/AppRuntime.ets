@@ -1,6 +1,7 @@
 import { common, WantAgent, wantAgent } from '@kit.AbilityKit';
 import { fileIo } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { SecureStore, StoredServerConfig, SavedProfile } from './SecureStore';
 import { RemoteServerApi, RemoteApiError, normalizeServerUrl, websocketUrl, QrLoginSession, QrLoginPoll,
@@ -1263,8 +1264,10 @@ export class AppRuntime {
       request.wantAgent = agent;
       notificationManager.publish(request).then(() => {
         LinkLog.write('notify', '后台提醒已发出 ' + title + ' ' + key.slice(0, 8));
-      }).catch((error: Error) => {
-        logWarn('publish attention notification failed');
+      }).catch((error: BusinessError) => {
+        // 错误码要留下来：PC 上实测过 publish 直接失败，没有码就只能猜是权限还是配置。
+        logWarn('publish attention notification failed code=' + error.code);
+        LinkLog.write('notify', '后台提醒发送失败 code=' + error.code);
       });
     }).catch(() => {
       logWarn('attention notification wantAgent unavailable');
@@ -1278,8 +1281,12 @@ export class AppRuntime {
   private cancelAttentionNotice(): void {
     notificationManager.cancel(102).then(() => {
       LinkLog.write('notify', '已撤销后台提醒');
-    }).catch((error: Error) => {
-      logWarn('cancel attention notification failed');
+    }).catch((error: BusinessError) => {
+      // 1600007 = 通知不存在：没发过通知时回前台会走到这里，属于正常情况，不该刷警告。
+      if (error.code === 1600007) {
+        return;
+      }
+      logWarn('cancel attention notification failed code=' + error.code);
     });
   }
 
@@ -1298,8 +1305,9 @@ export class AppRuntime {
         }
       }
     };
-    notificationManager.publish(request).catch((error: Error) => {
-      logWarn('publish notification failed');
+    notificationManager.publish(request).catch((error: BusinessError) => {
+      logWarn('publish completion notification failed code=' + error.code);
+      LinkLog.write('notify', '完成通知发送失败 code=' + error.code);
     });
   }
 

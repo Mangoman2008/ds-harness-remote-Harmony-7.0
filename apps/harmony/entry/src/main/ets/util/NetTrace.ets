@@ -192,6 +192,25 @@ export class NetTrace {
     return '最慢：' + slowest.label + ' ' + NetTrace.msText(slowest.totalMs);
   }
 
+  /**
+   * 连接质量：把最近的 RPC 样本压成中位/P90 两个数。
+   * 单个「最慢」容易被一次冷启动带偏，中位数才看得出常态。
+   */
+  static qualityLine(): string {
+    if (NetTrace.samples.length === 0) {
+      return '';
+    }
+    const values: number[] = [];
+    for (const sample of NetTrace.samples) {
+      values.push(sample.totalMs);
+    }
+    values.sort((a: number, b: number) => a - b);
+    const median: number = values[Math.floor(values.length / 2)];
+    const p90: number = values[Math.min(values.length - 1, Math.floor(values.length * 0.9))];
+    return 'RPC 质量：中位 ' + NetTrace.msText(median) + ' · P90 ' + NetTrace.msText(p90)
+      + ' · 样本 ' + values.length;
+  }
+
   /** 清空样本与计数（换服务器/退出登录时用，避免把上一台的数字算进来）。 */
   static reset(): void {
     NetTrace.samples = [];

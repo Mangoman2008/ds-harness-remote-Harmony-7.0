@@ -4669,6 +4669,10 @@ export class AppRuntime {
     if (slowest.length > 0) {
       rows.push(slowest);
     }
+    const quality: string = NetTrace.qualityLine();
+    if (quality.length > 0) {
+      rows.push(quality);
+    }
     rows.push(NetTrace.jitterLine());
     const uptime: string = this.connectedAt > 0
       ? (Math.round((Date.now() - this.connectedAt) / 1000) + ' 秒')

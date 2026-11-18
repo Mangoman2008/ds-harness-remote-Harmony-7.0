@@ -48,6 +48,22 @@ git restore build-profile.json5
 
 产物位于 `entry/build/default/outputs/default/`，未签名包不能安装到真机。`*.hap`、构建目录和本机配置均不入库。
 
+日常开发用统一入口（薄封装，底层仍是下面这些脚本）：
+
+```sh
+node apps/harmony/scripts/dshh.mjs devices      # 设备 + 各设备已装版本
+node apps/harmony/scripts/dshh.mjs doctor       # 工具链/签名/设备/一致性/文件系统/缓存/插件补丁
+node apps/harmony/scripts/dshh.mjs build        # 构建 signed hap（--clean 顺带清 hvigor 缓存）
+node apps/harmony/scripts/dshh.mjs install      # 装到所有在线设备（或 --pc / --phone / <id>）
+node apps/harmony/scripts/dshh.mjs launch       # 冷启动并读 combo 行确认版本与传输
+node apps/harmony/scripts/dshh.mjs logs -f      # 跟踪 hilog
+node apps/harmony/scripts/dshh.mjs shot -o a.jpg
+node apps/harmony/scripts/dshh.mjs smoke        # 委托 smoke.sh 跑完整冒烟
+node apps/harmony/scripts/dshh.mjs verify       # i18n / 版本 / 发包安全
+```
+
+手机没连时先 `export DSHH_PHONE=<ip:port>`，`--phone` 会自动 `hdc tconn` 一次。
+
 在仓库根运行 Node 侧检查：
 
 ```sh

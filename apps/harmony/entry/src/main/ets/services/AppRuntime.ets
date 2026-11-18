@@ -374,6 +374,12 @@ export class AppRuntime {
   switchingServer: boolean = false;
   switchingTo: string = '';
   notificationsEnabled: boolean = true;
+  /** 系统层面这条 App 的通知是否被允许（和上面的用户开关是两回事：系统关了照样发不出去）。 */
+  systemNotificationEnabled: boolean = false;
+  /** 是否已经查过一次系统通知状态（没查过就别在诊断里冒充「已关闭」）。 */
+  notificationStateChecked: boolean = false;
+  /** 上一次通知发布失败的错误码（'' = 没失败过）。 */
+  notificationLastError: string = '';
   appBackground: boolean = false;
   /** 系统网络是否可用（断网时立刻把 UI 变灰，而不是等 socket 自己断）。 */
   networkOnline: boolean = true;
@@ -1210,6 +1216,20 @@ export class AppRuntime {
     }
   }
 
+  /**
+   * 查一次系统层面的通知开关。用户手里那个「通知」开关只控制我们要不要发，
+   * 系统里关掉的话 publish 会直接失败（PC 上就踩到过），诊断页得把两者分开显示。
+   */
+  async refreshNotificationState(): Promise<void> {
+    try {
+      this.systemNotificationEnabled = await notificationManager.isNotificationEnabled();
+    } catch (error) {
+      this.systemNotificationEnabled = false;
+    }
+    this.notificationStateChecked = true;
+    this.notify();
+  }
+
   /** 申请通知权限（用户第一次开启开关时调）。 */
   async requestNotificationPermission(context: common.UIAbilityContext): Promise<boolean> {
     try {
@@ -1263,9 +1283,11 @@ export class AppRuntime {
     }).then((agent: WantAgent) => {
       request.wantAgent = agent;
       notificationManager.publish(request).then(() => {
+        this.notificationLastError = '';
         LinkLog.write('notify', '后台提醒已发出 ' + title + ' ' + key.slice(0, 8));
       }).catch((error: BusinessError) => {
         // 错误码要留下来：PC 上实测过 publish 直接失败，没有码就只能猜是权限还是配置。
+        this.notificationLastError = 'code=' + error.code;
         logWarn('publish attention notification failed code=' + error.code);
         LinkLog.write('notify', '后台提醒发送失败 code=' + error.code);
       });
@@ -1305,7 +1327,10 @@ export class AppRuntime {
         }
       }
     };
-    notificationManager.publish(request).catch((error: BusinessError) => {
+    notificationManager.publish(request).then(() => {
+      this.notificationLastError = '';
+    }).catch((error: BusinessError) => {
+      this.notificationLastError = 'code=' + error.code;
       logWarn('publish completion notification failed code=' + error.code);
       LinkLog.write('notify', '完成通知发送失败 code=' + error.code);
     });
@@ -4481,7 +4506,23 @@ export class AppRuntime {
     rows.push('会话：' + (this.currentSessionId.length > 0 ? this.currentSessionId : '—'));
     // 「点了没反应」这类反馈，先看客户端自己认为还有几条待答：数量、等了多久、是不是跨连接补发的。
     rows.push('待确认：' + this.pendingInteractionsSummary());
+    rows.push('通知：' + this.notificationSummary());
     return rows;
+  }
+
+  /** 通知状态的一句话：用户开关 / 系统开关 / 上次发布失败码，三者分开说。 */
+  private notificationSummary(): string {
+    const parts: string[] = [];
+    parts.push(this.notificationsEnabled ? 'App 内已开启' : 'App 内已关闭');
+    if (!this.notificationStateChecked) {
+      parts.push('系统状态未查');
+    } else {
+      parts.push(this.systemNotificationEnabled ? '系统已允许' : '系统未允许（发不出去）');
+    }
+    if (this.notificationLastError.length > 0) {
+      parts.push('上次发布失败 ' + this.notificationLastError);
+    }
+    return parts.join(' · ');
   }
 
   /** 待答交互的一句话摘要：没有就写「无」，有就把每条的时间与来源标出来。 */
@@ -4701,6 +4742,11 @@ export class AppRuntime {
    */
   /** 本轮补发的帧里，哪些是断线前到的（主机很可能已经作废）。 */
   private replayHints: Map<string, string> = new Map<string, string>();
+
+  /** 所有会话里还没作答的审批/提问总数（界面据此决定要不要刷新等待时长）。 */
+  pendingInteractionCount(): number {
+    return this.pendingInteractions.size;
+  }
 
   /** 该会话里还没作答的审批/提问数量（会话列表的「待确认」角标用）。 */
   pendingConfirmationCount(sessionId: string): number {

@@ -326,6 +326,9 @@ struct Index {
   /** 列表下方陪伴小人的呼吸状态（由定时器来回切）。 */
   @State maidBob: boolean = false;
   private maidTimer: number = -1;
+  /** 有待确认交互时每 15 秒跳一次，用来刷新卡片上的「已等待 N 分钟」。 */
+  private waitTimer: number = -1;
+  @State private waitTick: number = 0;
   private dockLightHideTimer: number = -1;
   /** 录音已停止、等主机转写。 */
   /** 被手动展开的连续工具调用段（键是段首工具的 id）。 */
@@ -360,6 +363,10 @@ struct Index {
   }
 
   aboutToDisappear(): void {
+    if (this.waitTimer >= 0) {
+      clearInterval(this.waitTimer);
+      this.waitTimer = -1;
+    }
     if (this.petSleepTimer >= 0) {
       clearInterval(this.petSleepTimer);
       this.petSleepTimer = -1;
@@ -599,7 +606,23 @@ struct Index {
     });
   }
 
+  /** 只有存在待确认交互时才需要每 15 秒刷新一次等待时长，平时不空转。 */
+  private syncWaitTimer(): void {
+    const pending: number = this.runtime.pendingInteractionCount();
+    if (pending > 0 && this.waitTimer < 0) {
+      this.waitTimer = setInterval(() => {
+        this.waitTick += 1;
+      }, 15000);
+    } else if (pending === 0 && this.waitTimer >= 0) {
+      clearInterval(this.waitTimer);
+      this.waitTimer = -1;
+      // 收尾时再跳一次，让最后一张卡回到「无待确认」的样子
+      this.waitTick += 1;
+    }
+  }
+
   private syncFromRuntime(): void {
+    this.syncWaitTimer();
     this.uiShowInspector = this.runtime.showInspector;
     this.uiPetEnabled = this.runtime.petEnabled;
     this.uiThemeTint = this.runtime.themeTint;
@@ -2120,6 +2143,17 @@ struct Index {
       detail = `${detail} → …`;
     }
     return detail;
+  }
+
+  /** 这张卡片是不是还在等用户作答（决定要不要跟着 waitTick 刷新）。 */
+  private isPendingInteraction(item: ChatItem): boolean {
+    if (item.kind === 'approval') {
+      return item.approvalOutcome.length === 0;
+    }
+    if (item.kind === 'question') {
+      return item.questionOutcome.length === 0;
+    }
+    return false;
   }
 
   private isRunExpanded(headId: string): boolean {
@@ -4850,7 +4884,8 @@ struct Index {
             .width('100%')
             .alignItems(HorizontalAlign.Center)
           }
-        }, (item: ChatItem) => `${item.id}#${item.rev}#${this.languageMode}`)
+        }, (item: ChatItem) => `${item.id}#${item.rev}#${this.languageMode}`
+          + (this.isPendingInteraction(item) ? `#t${this.waitTick}` : ''))
       }
       .layoutWeight(1)
       .width('100%')
@@ -6259,6 +6294,8 @@ struct Index {
             .borderRadius(8)
             .onClick(() => {
               this.diagnosticsOpen = true;
+              // 诊断里要显示系统通知开关，打开时现查一次，别显示上次的旧状态
+              this.runtime.refreshNotificationState();
             })
         }
         Row({ space: 6 }) {
@@ -6701,6 +6738,8 @@ struct Index {
             .padding({ left: 8, right: 8, top: 4, bottom: 4 })
             .onClick(() => {
               this.diagnosticsOpen = true;
+              // 诊断里要显示系统通知开关，打开时现查一次，别显示上次的旧状态
+              this.runtime.refreshNotificationState();
             })
           Text(this.tr('断开连接'))
             .fontSize(this.fs(12))
@@ -9357,6 +9396,13 @@ struct Index {
           .fontColor('#F5A623')
           .textAlign(TextAlign.Start)
       }
+      if (item.approvalOutcome.length === 0 && item.timestamp > 0) {
+        Text(waitLabel(item.timestamp, this.en()) + (waitLooksStale(item.timestamp)
+          ? (this.en() ? ' · host may have timed out' : ' · 主机可能已超时') : ''))
+          .fontSize(11)
+          .fontColor(waitLooksStale(item.timestamp) ? '#F85749' : this.pal().text3)
+          .textAlign(TextAlign.Start)
+      }
       if (item.approvalOutcome.length === 0) {
         Row({ space: 8 }) {
           Button(this.tr('允许'))
@@ -9459,6 +9505,13 @@ struct Index {
         Text(item.staleHint)
           .fontSize(11)
           .fontColor('#F5A623')
+          .textAlign(TextAlign.Start)
+      }
+      if (item.questionOutcome.length === 0 && item.timestamp > 0) {
+        Text(waitLabel(item.timestamp, this.en()) + (waitLooksStale(item.timestamp)
+          ? (this.en() ? ' · host may have timed out' : ' · 主机可能已超时') : ''))
+          .fontSize(11)
+          .fontColor(waitLooksStale(item.timestamp) ? '#F85749' : this.pal().text3)
           .textAlign(TextAlign.Start)
       }
       if (item.questionOutcome.length === 0) {
@@ -9793,6 +9846,28 @@ function cwdTail(cwd: string): string {
   const trimmed: string = cwd.endsWith('/') ? cwd.substring(0, cwd.length - 1) : cwd;
   const cut: number = trimmed.lastIndexOf('/');
   return cut >= 0 ? trimmed.substring(cut + 1) : trimmed;
+}
+
+function waitLabel(since: number, english: boolean): string {
+  if (since <= 0) {
+    return '';
+  }
+  const minutes: number = Math.floor((Date.now() - since) / 60000);
+  if (minutes < 1) {
+    return english ? 'just arrived' : '刚刚到达';
+  }
+  if (minutes < 60) {
+    return (english ? 'waiting ' : '已等待 ') + minutes + (english ? ' min' : ' 分钟');
+  }
+  const hours: number = Math.floor(minutes / 60);
+  const rest: number = minutes % 60;
+  return (english ? 'waiting ' : '已等待 ') + hours + (english ? 'h ' : ' 小时 ') + rest
+    + (english ? ' min' : ' 分钟');
+}
+
+/** 等太久（10 分钟以上）就提醒一句主机可能已经超时。 */
+function waitLooksStale(since: number): boolean {
+  return since > 0 && Date.now() - since > 10 * 60 * 1000;
 }
 
 function formatClock(timestamp: number): string {

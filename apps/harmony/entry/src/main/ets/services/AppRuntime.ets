@@ -128,6 +128,25 @@ export class ChatItem {
  * The UI subscribes via `onUiUpdate` and copies the public fields into @State.
  */
 /** commands/execute 的回执是 `{commandId, result:{kind,text}}`，文案在里层。 */
+/** 插件版本够不够新：只比三段数字，预发布后缀忽略（0.6.5-rc.1 也算 0.6.5）。 */
+function pluginAtLeast(version: string, major: number, minor: number, patch: number): boolean {
+  const match = /^(\d+)\.(\d+)\.(\d+)/.exec(version.trim());
+  if (match === null) {
+    return false;
+  }
+  const values: number[] = [Number(match[1]), Number(match[2]), Number(match[3])];
+  const wanted: number[] = [major, minor, patch];
+  for (let i = 0; i < 3; i += 1) {
+    if (values[i] > wanted[i]) {
+      return true;
+    }
+    if (values[i] < wanted[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function commandReplyText(result: Record<string, Object> | undefined): string {
   if (result === undefined) {
     return '';
@@ -4510,6 +4529,69 @@ export class AppRuntime {
     rows.push('待确认：' + this.pendingInteractionsSummary());
     rows.push('通知：' + this.notificationSummary());
     return rows;
+  }
+
+  /**
+   * 一键自检：把「现在能不能正常用」拆成几条能直接判定的事实。
+   * 现场排障时先看这个，比让用户翻 link.log 快。
+   */
+  async runSelfCheck(): Promise<string[]> {
+    const lines: string[] = [];
+    try {
+      this.systemNotificationEnabled = await notificationManager.isNotificationEnabled();
+      this.notificationStateChecked = true;
+    } catch (error) {
+      this.systemNotificationEnabled = false;
+      this.notificationStateChecked = true;
+    }
+    const relay: RelayTransport | undefined = this.activeRelay;
+    const connected: boolean = relay !== undefined && this.phase === PHASE_CHAT;
+    lines.push((connected ? '✓ ' : '✗ ') + '连接：' + (connected
+      ? (this.transportLabel.length > 0 ? this.transportLabel : '已连接')
+      : (this.reconnecting ? '重连中（' + this.reconnectStatus + '）' : '未连接')));
+
+    if (relay !== undefined) {
+      const silence: number = relay.silenceMs();
+      const fresh: boolean = silence >= 0 && silence < AppRuntime.LINK_STALE_MS;
+      lines.push((fresh ? '✓ ' : '! ') + '链路：'
+        + (silence < 0 ? '还没有数据' : (Math.round(silence / 100) / 10) + ' 秒前有数据'));
+      const skip: string = relay.lanSkipReason();
+      lines.push((this.transportLabel === 'lan' || this.transportLabel === 'p2p' ? '✓ ' : '· ')
+        + '直连：' + (this.transportLabel === 'lan' || this.transportLabel === 'p2p'
+          ? '已直连（' + this.transportLabel + '）'
+          : (skip.length > 0 ? '暂不走直连（' + skip + '）' : '未尝试')));
+    }
+
+    const hostOk: boolean = this.connectedHostHarness.length > 0;
+    lines.push((hostOk ? '✓ ' : '✗ ') + 'Host：'
+      + (hostOk ? HostCompat.report(this.connectedHostHarness).summary() : '没读到能力信息'));
+
+    // fileUploads/upload 是插件 0.6.5 才进的 allowlist，之前的版本只回 endpoint not allowed。
+    const fileUpload: boolean = pluginAtLeast(this.connectedHostClient, 0, 6, 5);
+    lines.push((fileUpload ? '✓ ' : '! ') + '文件上传：'
+      + (fileUpload ? '主机支持（' + this.connectedHostClient + '）'
+        : '主机可能太旧（' + (this.connectedHostClient.length > 0 ? this.connectedHostClient : '未知') + '），需 0.6.5+'));
+
+    const notifyOk: boolean = this.notificationsEnabled && this.systemNotificationEnabled
+      && this.notificationLastError.length === 0;
+    lines.push((notifyOk ? '✓ ' : '! ') + '通知：' + this.notificationSummary());
+
+    const pendingLine: string = this.pendingInteractionsSummary();
+    lines.push((this.pendingInteractions.size === 0 ? '✓ ' : '! ') + '待确认：' + pendingLine);
+
+    lines.push((LinkLog.pathText().length > 0 ? '✓ ' : '! ') + '链路日志：'
+      + (LinkLog.pathText().length > 0 ? '已落盘' : '未启用（重启就没了）'));
+
+    const warnings: number = lines.filter((line) => line.startsWith('! ')).length;
+    lines.push('');
+    lines.push(warnings === 0 ? '结论：没发现需要注意的地方' : '结论：有 ' + warnings + ' 条需要注意（上面带 ! 的）');
+    for (const line of lines) {
+      if (line.length > 0) {
+        LinkLog.write('selfcheck', line);
+      }
+    }
+    this.notify();
+    return lines;
   }
 
   /** 通知状态的一句话：用户开关 / 系统开关 / 上次发布失败码，三者分开说。 */

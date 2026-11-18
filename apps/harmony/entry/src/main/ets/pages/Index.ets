@@ -329,6 +329,8 @@ struct Index {
   /** 有待确认交互时每 15 秒跳一次，用来刷新卡片上的「已等待 N 分钟」。 */
   private waitTimer: number = -1;
   @State private waitTick: number = 0;
+  /** 一键自检的结果行（空表示还没跑过）。 */
+  @State private selfCheckLines: string[] = [];
   private dockLightHideTimer: number = -1;
   /** 录音已停止、等主机转写。 */
   /** 被手动展开的连续工具调用段（键是段首工具的 id）。 */
@@ -8518,6 +8520,17 @@ struct Index {
             .fontWeight(FontWeight.Medium)
             .fontColor(this.pal().text)
           Blank()
+          Text(this.tr('自检'))
+            .fontSize(this.fs(12))
+            .fontColor('#22D3EE')
+            .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+            .onClick(() => {
+              this.runtime.runSelfCheck().then((lines: string[]) => {
+                this.selfCheckLines = lines;
+              }).catch(() => {
+                this.selfCheckLines = [this.tr('自检失败：读不到运行时状态')];
+              });
+            })
           Text(this.tr('存文件'))
             .fontSize(this.fs(12))
             .fontColor('#22D3EE')
@@ -8562,6 +8575,26 @@ struct Index {
                 .width('100%')
                 .textAlign(TextAlign.Start)
             }, (line: string) => line)
+            if (this.selfCheckLines.length > 0) {
+              Column()
+                .width('100%')
+                .height(0.5)
+                .backgroundColor(this.pal().border)
+                .margin({ top: 4, bottom: 4 })
+              Text(this.tr('自检结果'))
+                .fontSize(this.fs(11))
+                .fontColor(this.pal().text3)
+                .width('100%')
+                .textAlign(TextAlign.Start)
+              ForEach(this.selfCheckLines, (line: string) => {
+                Text(line)
+                  .fontSize(this.fs(12))
+                  .fontColor(line.startsWith('✓') ? '#3FCF8E'
+                    : (line.startsWith('!') ? '#F5A623' : this.pal().text2))
+                  .width('100%')
+                  .textAlign(TextAlign.Start)
+              }, (line: string, index: number) => `check:${index}:${line}`)
+            }
             Column()
               .width('100%')
               .height(0.5)

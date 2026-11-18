@@ -236,6 +236,9 @@ function buildEnglish(): Map<string, string> {
 
   // —— 诊断导出（0.17.97）——
   map.set('存文件', 'Save to file');
+  map.set('自检', 'Self-check');
+  map.set('自检结果', 'Self-check result');
+  map.set('自检失败：读不到运行时状态', 'Self-check failed: runtime state unavailable');
   map.set('导出失败（存储不可用）', 'Export failed (storage unavailable)');
   map.set('已保存，可用 hdc file recv 拉走', 'Saved — pull it with hdc file recv');
   map.set('诊断已导出，可 hdc file recv 拉走', 'Diagnostics exported — pull it with hdc file recv');

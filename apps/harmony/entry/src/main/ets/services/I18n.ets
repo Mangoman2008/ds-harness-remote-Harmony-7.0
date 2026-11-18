@@ -238,6 +238,7 @@ function buildEnglish(): Map<string, string> {
   map.set('存文件', 'Save to file');
   map.set('合计', 'Total');
   map.set('发送失败', 'Send failed');
+  map.set('断线排队中 · 重连后自动发送', 'Queued offline · sends after reconnect');
   map.set('自检', 'Self-check');
   map.set('自检结果', 'Self-check result');
   map.set('自检失败：读不到运行时状态', 'Self-check failed: runtime state unavailable');

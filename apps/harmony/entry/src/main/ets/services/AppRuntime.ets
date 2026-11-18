@@ -64,6 +64,17 @@ class PendingInteraction {
   at: number = 0;
 }
 
+/** 断线期间排队的消息：重连后按原样补发。 */
+class QueuedSend {
+  sessionId: string = '';
+  itemId: string = '';
+  text: string = '';
+  images: PromptImagePart[] = [];
+  files: PromptFilePart[] = [];
+  fileNames: string[] = [];
+  at: number = 0;
+}
+
 /** 一条发送失败的用户消息：原样留住，重试时连图片和附件一起重发。 */
 class FailedSend {
   text: string = '';
@@ -192,6 +203,8 @@ export class AppRuntime {
   transportLabel: string = '';
   /** 历史图片字节缓存：attachmentId -> base64（'' 表示取失败，别反复打主机）。 */
   private attachmentCache: Map<string, string> = new Map<string, string>();
+  /** 断线时排队的消息（按会话），重连回到该会话后补发。 */
+  private queuedSends: QueuedSend[] = [];
   /** 发送失败的消息原样留一份，重试时连附件一起重发。 */
   private failedSends: Map<string, FailedSend> = new Map<string, FailedSend>();
   /** 还没作答的审批/提问帧，按事件 id 暂存：重连会换新的客户端实例，只有这层活得下来。 */
@@ -2656,6 +2669,16 @@ export class AppRuntime {
     const harness: HarnessAlphaClient | undefined = this.harness;
     const sessionId: string = this.currentSessionId;
     if (harness === undefined || sessionId.length === 0) {
+      // 断线/还在重连：与其让文字消失，不如排队，重连回到这条会话后自动补发。
+      if (sessionId.length > 0 && !trimmed.startsWith('/')) {
+        this.enqueueSend(sessionId, trimmed, images, files, fileNames);
+        return;
+      }
+      if (sessionId.length > 0) {
+        this.errorMsg = '断线时无法执行斜杠命令，等重连后再发';
+        this.notify();
+        return;
+      }
       return;
     }
     const requestId: string = randomId();
@@ -2719,6 +2742,86 @@ export class AppRuntime {
       this.clearRetry();
       this.notify();
     }
+  }
+
+  /** 排队一条断线期间的消息，并在聊天里先摆一条「已排队」的气泡。 */
+  private enqueueSend(sessionId: string, text: string, images: PromptImagePart[],
+    files: PromptFilePart[], fileNames: string[]): void {
+    const requestId: string = randomId();
+    const queued: QueuedSend = new QueuedSend();
+    queued.sessionId = sessionId;
+    queued.itemId = `local:${requestId}`;
+    queued.text = text;
+    queued.images = images;
+    queued.files = files;
+    queued.fileNames = fileNames;
+    queued.at = Date.now();
+    this.queuedSends.push(queued);
+
+    const item: ChatItem = new ChatItem();
+    item.id = queued.itemId;
+    item.kind = 'user';
+    item.role = 'user';
+    item.text = text;
+    item.requestRpcId = requestId;
+    item.sessionId = sessionId;
+    item.timestamp = queued.at;
+    item.sendState = 'queued';
+    if (images.length > 0) {
+      const previews: string[] = [];
+      for (const image of images) {
+        previews.push(image.base64);
+      }
+      item.images = previews;
+    }
+    if (fileNames.length > 0) {
+      item.fileNames = fileNames.slice();
+    }
+    const next: ChatItem[] = this.messages.slice();
+    next.push(item);
+    this.messages = next;
+    LinkLog.write('queue', '断线排队 1 条（会话 ' + sessionId.slice(0, 8) + '），共 ' + this.queuedSends.length + ' 条');
+    this.notify();
+  }
+
+  /** 回到某条会话时把排队消息补发出去（连接已恢复才调用）。 */
+  private async drainQueuedSends(sessionId: string): Promise<void> {
+    if (this.queuedSends.length === 0 || this.harness === undefined) {
+      return;
+    }
+    const sending: QueuedSend[] = [];
+    const rest: QueuedSend[] = [];
+    for (const queued of this.queuedSends) {
+      if (queued.sessionId === sessionId) {
+        sending.push(queued);
+      } else {
+        rest.push(queued);
+      }
+    }
+    if (sending.length === 0) {
+      return;
+    }
+    this.queuedSends = rest;
+    // 先把占位的「已排队」气泡撤掉，交给 sendPrompt 重新插入并真正发送
+    const keep: ChatItem[] = [];
+    for (const row of this.messages) {
+      let queuedItem: boolean = false;
+      for (const item of sending) {
+        if (row.id === item.itemId) {
+          queuedItem = true;
+          break;
+        }
+      }
+      if (!queuedItem) {
+        keep.push(row);
+      }
+    }
+    this.messages = keep;
+    LinkLog.write('queue', '补发排队消息 ' + sending.length + ' 条（会话 ' + sessionId.slice(0, 8) + '）');
+    for (const item of sending) {
+      await this.sendPrompt(item.text, item.images, item.files, item.fileNames);
+    }
+    this.notify();
   }
 
   /** 点「重试」：把这条失败消息撤掉，按原样（含图片与附件）重发一次，避免留下两条。 */
@@ -3802,6 +3905,8 @@ export class AppRuntime {
     this.messages = foldHistory(page.entries);
     // 必须在历史落到 this.messages 之后再补发：补发是同步回调，早了会被这行覆盖掉。
     this.replayPendingInteractions(harness, sessionId);
+    // 断线期间排队的消息，回到这条会话就补发（不 await：别让历史渲染等消息发送）
+    this.drainQueuedSends(sessionId).catch(() => undefined);
     this.historyHasMore = page.hasMore;
     this.oldestHistorySeq = oldestSeqOf(page.entries);
     this.rememberHistory(sessionId, this.messages);

@@ -7109,6 +7109,11 @@ struct Index {
           .borderRadius({ topLeft: 18, topRight: 18, bottomLeft: 18, bottomRight: 6 })
           .alignItems(HorizontalAlign.Start)
           .shadow({ radius: 12, color: 'rgba(61,92,246,0.30)', offsetX: 0, offsetY: 3 })
+          if (item.sendState === 'queued') {
+            Text(this.tr('断线排队中 · 重连后自动发送'))
+              .fontSize(this.fs(10))
+              .fontColor('rgba(255,255,255,0.78)')
+          }
           if (item.sendState === 'failed') {
             Row({ space: 8 }) {
               Text(this.tr('发送失败'))

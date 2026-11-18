@@ -165,6 +165,11 @@ export class AppRuntime {
   private pendingInteractions: Map<string, PendingInteraction> = new Map<string, PendingInteraction>();
   /** 这批待答交互属于哪台主机：换主机就整批作废。 */
   private pendingInteractionsHost: string = '';
+  /**
+   * 已经提醒过的交互 id。重连补发会把同一条审批重新走一遍 handleFrame，
+   * 不去重的话后台每重连一次就再响一遍铃声。
+   */
+  private notifiedInteractions: Set<string> = new Set<string>();
   /** 已经尝试补过的附件，避免 hydrate 死循环。 */
   private fetchedAttachments: Map<string, string> = new Map<string, string>();
   /** 历史图片补水已排程（历史是异步帧回来的，不能在 openSession 里只跑一次）。 */
@@ -890,6 +895,8 @@ export class AppRuntime {
       // 换主机就把上一台的待答交互清掉：事件 id 只在那台主机上有意义
       if (this.pendingInteractionsHost !== host.deviceId) {
         this.pendingInteractions.clear();
+        this.notifiedInteractions.clear();
+        this.cancelAttentionNotice();
         this.pendingInteractionsHost = host.deviceId;
       }
       this.connectedHostHarness = host.harnessVersion;
@@ -1220,10 +1227,17 @@ export class AppRuntime {
   /**
    * 需要用户动手的交互（审批 / 提问）在后台到达时提醒一次。
    * 这类卡片只在会话里可见，App 切到后台就完全静默 —— 用户回来只看到「没有反应」。
+   * key 用于去重：重连补发会重放同一条审批，重复弹通知只会打扰人。
    */
-  private publishAttentionNotice(title: string, text: string): void {
+  private publishAttentionNotice(title: string, text: string, key: string): void {
     if (!this.notificationsEnabled || !this.appBackground) {
       return;
+    }
+    if (key.length > 0) {
+      if (this.notifiedInteractions.has(key)) {
+        return;
+      }
+      this.notifiedInteractions.add(key);
     }
     const request: notificationManager.NotificationRequest = {
       id: 102,
@@ -1254,6 +1268,13 @@ export class AppRuntime {
       notificationManager.publish(request).catch((error: Error) => {
         logWarn('publish attention notification failed');
       });
+    });
+  }
+
+  /** 交互已在 App 内处理掉（或已失效）时撤掉那条提醒，别让通知栏留下过期的「需要确认」。 */
+  private cancelAttentionNotice(): void {
+    notificationManager.cancel(102).catch((error: Error) => {
+      logWarn('cancel attention notification failed');
     });
   }
 
@@ -4045,6 +4066,8 @@ export class AppRuntime {
     if (!wasBackground) {
       return;
     }
+    // 人已经回来了，通知栏那条提醒就没用了；卡片本身还在会话里。
+    this.cancelAttentionNotice();
     LinkLog.write('life', '回前台（phase=' + this.phase + ' reconnecting=' + this.reconnecting
       + ' transport=' + (this.transportLabel.length > 0 ? this.transportLabel : '—') + '）');
     const monitor: NetworkMonitor | undefined = this.netMonitor;
@@ -4627,6 +4650,11 @@ export class AppRuntime {
       return;
     }
     this.pendingInteractions.delete(key);
+    // 答完/失效就别再提醒；一批都处理干净了，通知栏里那条也该消失。
+    this.notifiedInteractions.delete(key);
+    if (this.pendingInteractions.size === 0) {
+      this.cancelAttentionNotice();
+    }
   }
 
   /**
@@ -4671,6 +4699,7 @@ export class AppRuntime {
     });
     for (const key of stale) {
       this.pendingInteractions.delete(key);
+      this.notifiedInteractions.delete(key);
     }
     if (frames.length === 0) {
       return;
@@ -4713,7 +4742,8 @@ export class AppRuntime {
         + ' 当前会话=' + (matches ? '是' : '否（先暂存）'));
       this.rememberInteraction(jsonStr(payload, 'approvalId', ''), frame);
       this.publishAttentionNotice('需要确认',
-        (jsonStr(payload, 'toolName', '工具') + ' 请求更高权限').slice(0, 60));
+        (jsonStr(payload, 'toolName', '工具') + ' 请求更高权限').slice(0, 60),
+        jsonStr(payload, 'approvalId', ''));
       if (matches) {
         const approvalKey: string = jsonStr(payload, 'approvalId', '');
         const hintValue: string | undefined = this.replayHints.get(approvalKey);
@@ -4732,7 +4762,7 @@ export class AppRuntime {
     if (type === 'question/requested') {
       const sessionId: string = jsonStr(payload, 'sessionId', '');
       this.rememberInteraction(frame.rpcId, frame);
-      this.publishAttentionNotice('需要回答', '主机在等你的选择');
+      this.publishAttentionNotice('需要回答', '主机在等你的选择', frame.rpcId);
       if (sessionId.length === 0 || sessionId === this.currentSessionId) {
         const questionHintValue: string | undefined = this.replayHints.get(frame.rpcId);
         const questionHint: string = questionHintValue !== undefined ? questionHintValue : '';

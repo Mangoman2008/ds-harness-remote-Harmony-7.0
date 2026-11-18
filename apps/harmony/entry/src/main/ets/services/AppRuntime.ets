@@ -1235,6 +1235,7 @@ export class AppRuntime {
     }
     if (key.length > 0) {
       if (this.notifiedInteractions.has(key)) {
+        LinkLog.write('notify', '同一条交互已在后台提醒过，跳过 ' + key.slice(0, 8));
         return;
       }
       this.notifiedInteractions.add(key);
@@ -1260,7 +1261,9 @@ export class AppRuntime {
       actionFlags: [wantAgent.WantAgentFlags.UPDATE_PRESENT_FLAG]
     }).then((agent: WantAgent) => {
       request.wantAgent = agent;
-      notificationManager.publish(request).catch((error: Error) => {
+      notificationManager.publish(request).then(() => {
+        LinkLog.write('notify', '后台提醒已发出 ' + title + ' ' + key.slice(0, 8));
+      }).catch((error: Error) => {
         logWarn('publish attention notification failed');
       });
     }).catch(() => {
@@ -1273,7 +1276,9 @@ export class AppRuntime {
 
   /** 交互已在 App 内处理掉（或已失效）时撤掉那条提醒，别让通知栏留下过期的「需要确认」。 */
   private cancelAttentionNotice(): void {
-    notificationManager.cancel(102).catch((error: Error) => {
+    notificationManager.cancel(102).then(() => {
+      LinkLog.write('notify', '已撤销后台提醒');
+    }).catch((error: Error) => {
       logWarn('cancel attention notification failed');
     });
   }

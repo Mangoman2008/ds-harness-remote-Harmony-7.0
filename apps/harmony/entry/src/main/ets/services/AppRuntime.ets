@@ -64,6 +64,14 @@ class PendingInteraction {
   at: number = 0;
 }
 
+/** 一条发送失败的用户消息：原样留住，重试时连图片和附件一起重发。 */
+class FailedSend {
+  text: string = '';
+  images: PromptImagePart[] = [];
+  files: PromptFilePart[] = [];
+  fileNames: string[] = [];
+}
+
 /** One rendered question inside a `question` chat card. */
 export class ChatQuestion {
   id: string = '';
@@ -104,6 +112,8 @@ export class ChatItem {
   actionCommand: string = '';
   /** 跨连接补发出来的审批：主机可能在断线期间已经作废，界面上要提前说一句。 */
   staleHint: string = '';
+  /** 用户消息的发送状态：'' 正常 | 'failed' 发失败（可原地重试） | 'queued' 断线排队中。 */
+  sendState: string = '';
   /** 用户消息里带的图片（标准 base64）；本地刚发的直接用，历史的按 attachmentId 拉。 */
   images: string[] = [];
   /** 用户消息里附带的文件名（只用于气泡展示，字节已经上传成 receipt）。 */
@@ -182,6 +192,8 @@ export class AppRuntime {
   transportLabel: string = '';
   /** 历史图片字节缓存：attachmentId -> base64（'' 表示取失败，别反复打主机）。 */
   private attachmentCache: Map<string, string> = new Map<string, string>();
+  /** 发送失败的消息原样留一份，重试时连附件一起重发。 */
+  private failedSends: Map<string, FailedSend> = new Map<string, FailedSend>();
   /** 还没作答的审批/提问帧，按事件 id 暂存：重连会换新的客户端实例，只有这层活得下来。 */
   private pendingInteractions: Map<string, PendingInteraction> = new Map<string, PendingInteraction>();
   /** 这批待答交互属于哪台主机：换主机就整批作废。 */
@@ -2683,21 +2695,52 @@ export class AppRuntime {
         this.steerMode ? 'steer' : 'queue', images, files);
       this.clearRetry();
     } catch (error) {
-      this.errorMsg = errorMessage(error);
+      const explained: ErrorExplanation = explainError(errorMessage(error));
+      this.errorMsg = explained.text;
       this.generating = false;
-      // 主机没收到：先把乐观插入的气泡撤掉，重试时按原样重发一次，避免重复两条
-      const kept: ChatItem[] = [];
-      for (const item of this.messages) {
-        if (item.id !== `local:${requestId}`) {
-          kept.push(item);
+      // 气泡留在原地并标成「发送失败」：用户能直接对着这条消息重试，
+      // 也比「消息消失 + 顶部一条横幅」更容易看懂到底哪句没发出去。
+      const payload: FailedSend = new FailedSend();
+      payload.text = trimmed;
+      payload.images = images;
+      payload.files = files;
+      payload.fileNames = fileNames;
+      this.failedSends.set(`local:${requestId}`, payload);
+      const nextFailed: ChatItem[] = this.messages.slice();
+      for (let i = 0; i < nextFailed.length; i++) {
+        if (nextFailed[i].id === `local:${requestId}`) {
+          const copy: ChatItem = cloneItem(nextFailed[i]);
+          copy.sendState = 'failed';
+          copy.rev += 1;
+          nextFailed[i] = copy;
         }
       }
-      this.messages = kept;
-      this.setRetry('重新发送', () => {
-        this.sendPrompt(trimmed, images);
-      });
+      this.messages = nextFailed;
+      this.clearRetry();
       this.notify();
     }
+  }
+
+  /** 点「重试」：把这条失败消息撤掉，按原样（含图片与附件）重发一次，避免留下两条。 */
+  async retrySend(item: ChatItem): Promise<void> {
+    const payload: FailedSend | undefined = this.failedSends.get(item.id);
+    if (payload === undefined) {
+      this.setRetry('重新发送', () => {
+        this.sendPrompt(item.text);
+      });
+      this.notify();
+      return;
+    }
+    this.failedSends.delete(item.id);
+    const kept: ChatItem[] = [];
+    for (const row of this.messages) {
+      if (row.id !== item.id) {
+        kept.push(row);
+      }
+    }
+    this.messages = kept;
+    this.notify();
+    await this.sendPrompt(payload.text, payload.images, payload.files, payload.fileNames);
   }
 
   /** 下一个 tick 再补水，避免每个事件都触发一轮 RPC。 */
@@ -5314,6 +5357,9 @@ function cloneItem(item: ChatItem): ChatItem {
   copy.rev = item.rev;
   copy.noticeKind = item.noticeKind;
   copy.actionCommand = item.actionCommand;
+  copy.staleHint = item.staleHint;
+  copy.fileNames = item.fileNames.slice();
+  copy.sendState = item.sendState;
   copy.images = item.images.slice();
   copy.imageAttachmentIds = item.imageAttachmentIds.slice();
   copy.imageRefs = item.imageRefs.slice();

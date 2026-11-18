@@ -7109,6 +7109,19 @@ struct Index {
           .borderRadius({ topLeft: 18, topRight: 18, bottomLeft: 18, bottomRight: 6 })
           .alignItems(HorizontalAlign.Start)
           .shadow({ radius: 12, color: 'rgba(61,92,246,0.30)', offsetX: 0, offsetY: 3 })
+          if (item.sendState === 'failed') {
+            Row({ space: 8 }) {
+              Text(this.tr('发送失败'))
+                .fontSize(this.fs(10))
+                .fontColor('#F85749')
+              Text(this.tr('重试'))
+                .fontSize(this.fs(10))
+                .fontColor('#22D3EE')
+                .onClick(() => {
+                  this.runtime.retrySend(item);
+                })
+            }
+          }
           if (item.timestamp > 0) {
             Text(formatClock(item.timestamp))
               .fontSize(this.fs(10))

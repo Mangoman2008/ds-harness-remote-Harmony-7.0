@@ -4753,6 +4753,10 @@ export class AppRuntime {
     const count: number = harness.republishPendingSessionInteractions(sessionId);
     this.replayHints.clear();
     logInfo('replay pending interactions session=' + sessionId + ' n=' + count);
+    if (count > 0) {
+      // 诊断页里能对上「手机上看到几张卡」与「客户端补发了几张」，对不上就是主机侧丢了。
+      LinkLog.write('replay', '补发 ' + count + ' 条待确认（会话 ' + sessionId.slice(0, 8) + '）');
+    }
   }
 
   private handleFrame(frame: HarnessClientFrame): void {

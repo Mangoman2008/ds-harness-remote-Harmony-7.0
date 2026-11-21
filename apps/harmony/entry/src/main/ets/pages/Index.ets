@@ -4891,7 +4891,7 @@ struct Index {
                         })
                     }, (item: string) => 'empty-prompt-' + item)
                   }
-                  Text(this.tr('输入 / 查看主机命令，点 ✦ 打开提示词库'))
+                  Text(this.tr('输入 / 查看主机命令，点星号打开提示词库'))
                     .fontSize(this.fs(10))
                     .fontColor(this.pal().text3)
                     .padding({ top: 2 })
@@ -5508,9 +5508,11 @@ struct Index {
           })
           // 提示词库入口：和图片键同规格的小圆玻璃
           Row() {
-            Text('✦')
-              .fontSize(this.fs(15))
-              .fontColor(this.pal().text2)
+            Image($r('app.media.ic_prompt'))
+              .width(this.fs(17))
+              .height(this.fs(17))
+              .fillColor(this.pal().text2)
+              .objectFit(ImageFit.Contain)
           }
           .width(this.compactDock() ? 30 : 34)
           .height(this.compactDock() ? 40 : 46)
@@ -5532,9 +5534,11 @@ struct Index {
           // 展开：只在有空间时给（手机上会挤占输入框宽度，长文交给全屏编辑入口）
           if (!this.compactDock()) {
           Row() {
-            Text('⤢')
-              .fontSize(this.fs(15))
-              .fontColor(this.pal().text2)
+            Image($r('app.media.ic_expand'))
+              .width(this.fs(16))
+              .height(this.fs(16))
+              .fillColor(this.pal().text2)
+              .objectFit(ImageFit.Contain)
           }
           .width(this.compactDock() ? 30 : 34)
           .height(this.compactDock() ? 40 : 46)

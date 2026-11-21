@@ -441,7 +441,7 @@ function buildEnglish(): Map<string, string> {
   map.set('诊断信息已复制', 'Diagnostics copied');
   map.set('读取中…', 'Reading…');
   map.set('超紧凑', 'Ultra compact');
-  map.set('输入 / 查看主机命令，点 ✦ 打开提示词库', 'Type / for host commands, tap ✦ for the prompt library');
+  map.set('输入 / 查看主机命令，点星号打开提示词库', 'Type / for host commands, tap ✦ for the prompt library');
   map.set('输入关键词…', 'Type keywords…');
   map.set('运行中', 'Running');
   map.set('还没有', 'Nothing yet');

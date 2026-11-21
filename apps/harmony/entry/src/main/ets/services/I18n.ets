@@ -176,6 +176,8 @@ function buildEnglish(): Map<string, string> {
   map.set('没有找到可用素材，继续用 emoji', 'No usable assets found, staying on emoji');
   map.set('思考', 'Thinking');
   map.set('已复制整段代码', 'Code block copied');
+  map.set('复制回复', 'Copy reply');
+  map.set('已复制回复', 'Reply copied');
   map.set('收起', 'collapse');
   map.set('展开', 'expand');
   map.set('回到最新', 'Jump to latest');

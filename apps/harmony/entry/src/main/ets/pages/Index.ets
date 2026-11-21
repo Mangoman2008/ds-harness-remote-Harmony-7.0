@@ -8020,10 +8020,27 @@ struct Index {
             }
           }
           if (item.timestamp > 0) {
-            Text(formatClock(item.timestamp))
-              .fontSize(this.fs(10))
-              .fontColor(this.pal().text3)
-              .padding({ top: 2 })
+            Row({ space: 8 }) {
+              Text(formatClock(item.timestamp))
+                .fontSize(this.fs(10))
+                .fontColor(this.pal().text3)
+              // 复制回复：不只在长按菜单里，正文下方直接给一个（手机上尤其有用）
+              if (item.text.length > 0 && !item.streaming) {
+                Text(this.tr('复制回复'))
+                  .fontSize(this.fs(10))
+                  .fontColor(this.pal().text3)
+                  .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                  .backgroundColor(this.pal().chip)
+                  .borderRadius(6)
+                  .onClick(() => {
+                    const data: pasteboard.PasteData = pasteboard.createData(
+                      pasteboard.MIMETYPE_TEXT_PLAIN, item.text);
+                    pasteboard.getSystemPasteboard().setData(data).then(() => {
+                      promptAction.showToast({ message: this.tr('已复制回复') });
+                    }).catch(() => undefined);
+                  })
+              }
+            }
           }
           if (item.streaming && item.text.length === 0 && item.reasoning.length === 0) {
             Row({ space: 8 }) {

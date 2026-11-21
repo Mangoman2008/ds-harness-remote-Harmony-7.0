@@ -259,6 +259,13 @@ function buildEnglish(): Map<string, string> {
   map.set('存文件', 'Save to file');
   map.set('合计', 'Total');
   map.set('首页动态图', 'Home illustration');
+  map.set('自定义图片', 'Custom image');
+  map.set('内置立绘', 'Built-in art');
+  map.set('首页立绘已更新', 'Home illustration updated');
+  map.set('选图失败，换一张试试', 'Could not load that image, try another');
+  map.set('使用内置立绘', 'Use built-in art');
+  map.set('选择自定义图片', 'Choose custom image');
+  map.set('关闭（不显示）', 'Turn off (hide)');
   map.set('显示桌宠', 'Show pet');
   map.set('显示中', 'Visible');
   map.set('已隐藏', 'Hidden');

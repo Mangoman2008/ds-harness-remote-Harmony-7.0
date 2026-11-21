@@ -35,6 +35,7 @@ const KEY_THEME_TINT = 'dshremote.themeTint.v1';
 /** 桌宠（鲸娘）：干活/等你确认/完成 四态小挂件。 */
 const KEY_PET = 'dshremote.pet.v1';
 const KEY_HOME_MASCOT: string = 'ui.homeMascot';
+const KEY_HOME_MASCOT_IMG: string = 'ui.homeMascotImg.v1';
 /** 已发送文本里的 Key/Token 默认打码。 */
 const KEY_SECRET_MASK = 'dshremote.secretMask.v1';
 /** 会话壁纸（压缩后的 JPEG base64；不是秘密，只存本地）。 */
@@ -885,6 +886,18 @@ export class SecureStore {
 
   loadHomeMascot(): boolean {
     return this.getSync(KEY_HOME_MASCOT, '1') === '1';
+  }
+
+  loadHomeMascotImage(): string {
+    return this.getSync(KEY_HOME_MASCOT_IMG, '');
+  }
+
+  saveHomeMascotImage(base64: string): void {
+    try {
+      this.putSync(KEY_HOME_MASCOT_IMG, base64);
+    } catch (error) {
+      logWarn('home mascot image save failed');
+    }
   }
 
   saveHomeMascot(enabled: boolean): void {

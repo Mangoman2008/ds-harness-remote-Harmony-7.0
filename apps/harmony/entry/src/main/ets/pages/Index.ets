@@ -3007,11 +3007,40 @@ struct Index {
                 });
               })
               this.SettingsRow(this.tr('首页动态图'),
-                this.uiHomeMascot ? this.tr('显示') : this.tr('隐藏'),
+                !this.uiHomeMascot
+                  ? this.tr('关闭')
+                  : (this.runtime.homeMascotImage.length > 0 ? this.tr('自定义图片') : this.tr('内置立绘')),
                 false, () => {
-                  this.uiHomeMascot = !this.uiHomeMascot;
-                  this.settingsRev = this.settingsRev + 1;
-                  this.runtime.setHomeMascotEnabled(this.uiHomeMascot);
+                  ActionSheet.show({
+                    title: this.tr('首页动态图'),
+                    message: this.tr('建议 PNG/JPG，比例约 3:4（如 300×400），单边 ≤1024px、文件 ≤1 MB；'
+                      + '选图后会自动压到 512px 以内，透明背景请用 PNG。'),
+                    sheets: [
+                      {
+                        title: this.tr('使用内置立绘'),
+                        action: () => {
+                          this.uiHomeMascot = true;
+                          this.settingsRev = this.settingsRev + 1;
+                          this.runtime.setHomeMascotImage('');
+                          this.runtime.setHomeMascotEnabled(true);
+                        }
+                      },
+                      {
+                        title: this.tr('选择自定义图片'),
+                        action: () => {
+                          this.openHomeMascotPicker();
+                        }
+                      },
+                      {
+                        title: this.tr('关闭（不显示）'),
+                        action: () => {
+                          this.uiHomeMascot = false;
+                          this.settingsRev = this.settingsRev + 1;
+                          this.runtime.setHomeMascotEnabled(false);
+                        }
+                      }
+                    ]
+                  });
                 })
               this.SettingsRow(this.tr('桌宠'),
                 this.uiPetEnabled ? this.tr('开 · 干活/等确认/完成 四态') : this.tr('关'),
@@ -3248,6 +3277,43 @@ struct Index {
   }
 
   /** 选一张壁纸：压到长边 720、JPEG q70 再存（虚化后不需要高清）。 */
+  /** 选一张图当首页立绘：压到 512px 长边存 base64，和壁纸同一套压缩思路。 */
+  private async openHomeMascotPicker(): Promise<void> {
+    try {
+      const picked: PickedImage[] = await pickImages(1);
+      if (picked.length === 0) {
+        return;
+      }
+      let base64: string = picked[0].base64;
+      try {
+        const bytes: Uint8Array = new util.Base64Helper().decodeSync(base64);
+        const source: image.ImageSource = image.createImageSource(bytes.buffer as ArrayBuffer);
+        const info: image.ImageInfo = await source.getImageInfo();
+        const longest: number = Math.max(info.size.width, info.size.height);
+        const scale: number = longest > 512 ? 512 / longest : 1;
+        const pixel: image.PixelMap = await source.createPixelMap({
+          desiredSize: {
+            width: Math.max(1, Math.round(info.size.width * scale)),
+            height: Math.max(1, Math.round(info.size.height * scale))
+          }
+        });
+        const packer: image.ImagePacker = image.createImagePacker();
+        const encoded: ArrayBuffer = await packer.packing(pixel, { format: 'image/jpeg', quality: 82 });
+        base64 = new util.Base64Helper().encodeToStringSync(new Uint8Array(encoded));
+      } catch (error) {
+        logWarn('home mascot compress failed, keep original');
+      }
+      this.uiHomeMascot = true;
+      this.settingsRev = this.settingsRev + 1;
+      this.runtime.setHomeMascotImage(base64);
+      this.runtime.setHomeMascotEnabled(true);
+      promptAction.showToast({ message: this.tr('首页立绘已更新') });
+    } catch (error) {
+      logWarn('home mascot pick failed: ' + errorMessage(error));
+      promptAction.showToast({ message: this.tr('选图失败，换一张试试') });
+    }
+  }
+
   private async openWallpaperPicker(): Promise<void> {
     try {
       const picked: PickedImage[] = await pickImages(1);
@@ -4390,27 +4456,38 @@ struct Index {
   @Builder
   MaidMascot() {
     Column({ space: 2 }) {
-      Stack({ alignContent: Alignment.Bottom }) {
-        Column()
-          .width(104)
-          .height(12)
-          .borderRadius(6)
-          .backgroundColor(this.isDarkUi ? 'rgba(0,0,0,0.30)' : 'rgba(90,120,190,0.16)')
-          .scale({ x: this.maidBob ? 1 : 0.86 })
-          .opacity(this.maidBob ? 0.9 : 0.6)
-          .animation({ duration: 2000, curve: Curve.EaseInOut })
-        if (this.uiHomeMascot) {
-          Image($r('app.media.maid_mascot'))
-            .width(158)
-            .height(204)
-            .objectFit(ImageFit.Contain)
-            .translate({ y: this.maidBob ? -7 : 0 })
-            .rotate({ angle: this.maidBob ? 1.2 : -1.2 })
+      // 关掉时不挂载任何一层：底下的影子条也属于立绘，不能留一条横条
+      if (this.uiHomeMascot) {
+        Stack({ alignContent: Alignment.Bottom }) {
+          Column()
+            .width(104)
+            .height(12)
+            .borderRadius(6)
+            .backgroundColor(this.isDarkUi ? 'rgba(0,0,0,0.30)' : 'rgba(90,120,190,0.16)')
+            .scale({ x: this.maidBob ? 1 : 0.86 })
+            .opacity(this.maidBob ? 0.9 : 0.6)
             .animation({ duration: 2000, curve: Curve.EaseInOut })
+          if (this.runtime.homeMascotImage.length > 0) {
+            Image(imageDataUri(this.runtime.homeMascotImage))
+              .width(158)
+              .height(204)
+              .objectFit(ImageFit.Contain)
+              .translate({ y: this.maidBob ? -7 : 0 })
+              .rotate({ angle: this.maidBob ? 1.2 : -1.2 })
+              .animation({ duration: 2000, curve: Curve.EaseInOut })
+          } else {
+            Image($r('app.media.maid_mascot'))
+              .width(158)
+              .height(204)
+              .objectFit(ImageFit.Contain)
+              .translate({ y: this.maidBob ? -7 : 0 })
+              .rotate({ angle: this.maidBob ? 1.2 : -1.2 })
+              .animation({ duration: 2000, curve: Curve.EaseInOut })
+          }
         }
+        .height(190)
+        .width('100%')
       }
-      .height(190)
-      .width('100%')
       Text(this.tr('选一台主机，继续上次的工作'))
         .fontSize(12)
         .fontColor(this.pal().text3)

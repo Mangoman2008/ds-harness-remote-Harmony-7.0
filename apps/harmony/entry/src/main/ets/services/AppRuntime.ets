@@ -398,6 +398,8 @@ export class AppRuntime {
   petEnabled: boolean = true;
   /** 首页（设备列表）那张会呼吸的立绘是否显示。 */
   homeMascotEnabled: boolean = true;
+  /** 自定义首页立绘（压缩后的 JPEG base64）；空 = 用内置资源图。 */
+  homeMascotImage: string = '';
   /** 桌宠「完成」动作只亮一会儿，记录时刻。 */
   petDoneAt: number = 0;
   /** 会话输入草稿（sessionId -> 文本）。 */
@@ -475,6 +477,12 @@ export class AppRuntime {
   setPetEnabled(enabled: boolean): void {
     this.petEnabled = enabled;
     this.store.savePet(enabled);
+    this.notify();
+  }
+
+  setHomeMascotImage(base64: string): void {
+    this.homeMascotImage = base64;
+    this.store.saveHomeMascotImage(base64);
     this.notify();
   }
 
@@ -638,6 +646,7 @@ export class AppRuntime {
       this.themeTint = this.store.loadThemeTint();
       this.petEnabled = this.store.loadPet();
     this.homeMascotEnabled = this.store.loadHomeMascot();
+    this.homeMascotImage = this.store.loadHomeMascotImage();
       this.languageMode = this.store.loadLanguageMode();
       this.textScaleMode = this.store.loadTextScale();
       this.splitWidth = this.store.loadSplitWidth();

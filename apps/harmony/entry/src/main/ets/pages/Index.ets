@@ -339,6 +339,8 @@ struct Index {
   @State expandedReasoning: string[] = [];
   /** 列表里被折叠的工作区分组（存组标题）。 */
   @State collapsedWorkspaces: string[] = [];
+  /** 「最近」入口是否展开（默认收起，不再常驻占一行）。 */
+  @State recentOpen: boolean = false;
   private windowChromeDark: boolean = false;
   private chromeApplied: boolean = false;
 
@@ -5912,6 +5914,18 @@ struct Index {
               this.runtime.searchSessions(this.sessionSearchInput);
             }, 250);
           })
+        if (!this.sessionSearchActive && this.runtime.recentSessions.length > 0) {
+          Text(this.tr('最近') + (this.recentOpen ? ' ▾' : ' ▸'))
+            .fontSize(this.fs(12))
+            .fontColor(this.recentOpen ? '#22D3EE' : this.pal().text3)
+            .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+            .backgroundColor(this.recentOpen ? 'rgba(34,211,238,0.12)' : this.pal().inputBg)
+            .borderRadius(9)
+            .border({ width: 1, color: this.recentOpen ? 'rgba(34,211,238,0.40)' : this.pal().border })
+            .onClick(() => {
+              this.recentOpen = !this.recentOpen;
+            })
+        }
         if (this.sessionSearchActive) {
           Text('清除')
             .fontSize(this.fs(12))
@@ -6040,7 +6054,7 @@ struct Index {
         .width('100%')
         .height(0.5)
         .backgroundColor(this.pal().border)
-      if (!this.sessionSearchActive && this.runtime.recentSessions.length > 0) {
+      if (this.recentOpen && !this.sessionSearchActive && this.runtime.recentSessions.length > 0) {
         Scroll() {
           Row({ space: 8 }) {
             Text(this.tr('最近'))

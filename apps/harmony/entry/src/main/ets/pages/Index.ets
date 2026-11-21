@@ -7255,7 +7255,41 @@ struct Index {
     Column({ space: 5 }) {
       // key 里带上 imageVersion：图片解码完成/失败后重建这些行，否则会一直停在「图片加载中」。
       ForEach(markdownLines(streaming ? text + '▍' : text), (line: MdLine, index: number) => {
-        if (line.imageSrc.length > 0) {
+        if (line.tableHeader.length > 0) {
+          Column({ space: 0 }) {
+            Row({ space: 0 }) {
+              ForEach(line.tableHeader, (cell: string, ci: number) => {
+                Text(cell)
+                  .fontSize(this.fs(12))
+                  .fontWeight(FontWeight.Medium)
+                  .fontColor(this.pal().text)
+                  .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+                  .layoutWeight(1)
+                  .textAlign(TextAlign.Start)
+              }, (cell: string, ci: number) => 'h:' + ci + ':' + cell)
+            }
+            .width('100%')
+            .backgroundColor(this.pal().chip)
+            ForEach(line.tableRows, (row: string[], ri: number) => {
+              Row({ space: 0 }) {
+                ForEach(row, (cell: string, ci: number) => {
+                  Text(cell)
+                    .fontSize(this.fs(12))
+                    .fontColor(this.pal().text2)
+                    .padding({ left: 8, right: 8, top: 5, bottom: 5 })
+                    .layoutWeight(1)
+                    .textAlign(TextAlign.Start)
+                }, (cell: string, ci: number) => 'c:' + ri + ':' + ci + ':' + cell)
+              }
+              .width('100%')
+              .border({ width: { top: 0.5 }, color: this.pal().border })
+            }, (row: string[], ri: number) => 'r:' + ri + ':' + row.join('|'))
+          }
+          .width('100%')
+          .borderRadius(8)
+          .border({ width: 1, color: this.pal().border })
+          .clip(true)
+        } else if (line.imageSrc.length > 0) {
           this.MdImage(line)
         } else if (line.code) {
           Text(line.text)
@@ -9998,6 +10032,9 @@ class MdLine {
   imageAlt: string = '';
   /** 非空表示这一行整行就是一个链接。 */
   linkUrl: string = '';
+  /** 非空表示这一块是 GFM 表格：表头 + 数据行（每行是单元格文本）。 */
+  tableHeader: string[] = [];
+  tableRows: string[][] = [];
 }
 
 /** 一行里切出来的片段：要么是文字，要么是一张图。 */
@@ -10088,6 +10125,49 @@ function markdownLines(source: string): MdLine[] {
     }
     if (line.trim().length === 0) {
       continue;
+    }
+    // GFM 表格：连续的 | 行合成一张表，第二行是 ---|--- 分隔行
+    if (line.trim().startsWith('|') && line.indexOf('|', line.indexOf('|') + 1) > 0) {
+      const rows: string[][] = [];
+      let cursor: number = raw.indexOf(original);
+      while (cursor < raw.length) {
+        const candidate: string = raw[cursor].trim();
+        if (!candidate.startsWith('|')) {
+          break;
+        }
+        const cells: string[] = [];
+        for (const cell of candidate.split('|')) {
+          cells.push(cell.trim());
+        }
+        // 首尾一定是空串（行首/行尾的竖线），去掉
+        if (cells.length > 0 && cells[0].length === 0) {
+          cells.shift();
+        }
+        if (cells.length > 0 && cells[cells.length - 1].length === 0) {
+          cells.pop();
+        }
+        rows.push(cells);
+        cursor += 1;
+      }
+      // 至少要表头 + 分隔行
+      if (rows.length >= 2) {
+        let dataStart: number = 1;
+        const separator: string = rows[1].join('');
+        if (/^[-: ]+$/.test(separator)) {
+          dataStart = 2;
+        }
+        const table: MdLine = new MdLine();
+        table.tableHeader = rows[0];
+        for (let i = dataStart; i < rows.length; i++) {
+          table.tableRows.push(rows[i]);
+        }
+        out.push(table);
+        // 跳过已经吃掉的表格行
+        for (let i = 0; i < cursor - 1; i++) {
+          raw.shift();
+        }
+        continue;
+      }
     }
     const entry: MdLine = new MdLine();
     let body: string = line.trim();

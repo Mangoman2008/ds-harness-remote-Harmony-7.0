@@ -6640,6 +6640,30 @@ struct Index {
         .width('100%')
         .padding({ left: 18, right: 18, top: 4, bottom: 12 })
 
+        // —— 桌宠开关：首页（齿轮面板）就能关，不用翻设置抽屉 ——
+        Row({ space: 10 }) {
+          Column({ space: 3 }) {
+            Text(this.tr('显示桌宠'))
+              .fontSize(this.fs(11))
+              .fontColor(this.pal().text3)
+            Text(this.uiPetEnabled ? this.tr('显示中') : this.tr('已隐藏'))
+              .fontSize(this.fs(12))
+              .fontColor(this.pal().text2)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          Toggle({ type: ToggleType.Switch, isOn: this.uiPetEnabled })
+            .selectedColor('#4D6BFE')
+            .onChange((isOn: boolean) => {
+              this.uiPetEnabled = isOn;
+              this.settingsRev = this.settingsRev + 1;
+              this.runtime.setPetEnabled(isOn);
+              this.tapHaptic();
+            })
+        }
+        .width('100%')
+        .padding({ left: 18, right: 18, top: 4, bottom: 12 })
+
         // —— 会话壁纸 ——
         Row({ space: 10 }) {
           Column({ space: 3 }) {

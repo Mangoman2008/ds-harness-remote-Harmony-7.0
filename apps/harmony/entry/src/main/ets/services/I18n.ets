@@ -237,6 +237,9 @@ function buildEnglish(): Map<string, string> {
   // —— 诊断导出（0.17.97）——
   map.set('存文件', 'Save to file');
   map.set('合计', 'Total');
+  map.set('显示桌宠', 'Show pet');
+  map.set('显示中', 'Visible');
+  map.set('已隐藏', 'Hidden');
   map.set('发送失败', 'Send failed');
   map.set('断线排队中 · 重连后自动发送', 'Queued offline · sends after reconnect');
   map.set('自检', 'Self-check');

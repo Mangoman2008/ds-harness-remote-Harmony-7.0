@@ -396,6 +396,8 @@ export class AppRuntime {
   themeTint: number = 0;
   /** 桌宠（鲸娘）开关。 */
   petEnabled: boolean = true;
+  /** 首页（设备列表）那张会呼吸的立绘是否显示。 */
+  homeMascotEnabled: boolean = true;
   /** 桌宠「完成」动作只亮一会儿，记录时刻。 */
   petDoneAt: number = 0;
   /** 会话输入草稿（sessionId -> 文本）。 */
@@ -473,6 +475,12 @@ export class AppRuntime {
   setPetEnabled(enabled: boolean): void {
     this.petEnabled = enabled;
     this.store.savePet(enabled);
+    this.notify();
+  }
+
+  setHomeMascotEnabled(enabled: boolean): void {
+    this.homeMascotEnabled = enabled;
+    this.store.saveHomeMascot(enabled);
     this.notify();
   }
 
@@ -629,6 +637,7 @@ export class AppRuntime {
       this.themeMode = this.store.loadThemeMode();
       this.themeTint = this.store.loadThemeTint();
       this.petEnabled = this.store.loadPet();
+    this.homeMascotEnabled = this.store.loadHomeMascot();
       this.languageMode = this.store.loadLanguageMode();
       this.textScaleMode = this.store.loadTextScale();
       this.splitWidth = this.store.loadSplitWidth();
@@ -4484,7 +4493,7 @@ export class AppRuntime {
       this.compactHistory ? 'compact' : 'full',
       this.secretMask ? 'mask' : 'plain',
       this.wallpaper.length > 0 ? 'wallpaper:' + this.wallpaperDim : 'nowall',
-      this.petEnabled ? 'pet' : 'nopet'
+      (this.petEnabled ? 'pet' : 'nopet') + (this.homeMascotEnabled ? '+mascot' : '')
     ].join(',');
     return 'client=' + clientVersion() + '|host=' + this.connectedHostHarness
       + '|transport=' + this.transportLabel + '|' + switches;

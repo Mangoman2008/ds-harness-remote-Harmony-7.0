@@ -258,6 +258,7 @@ function buildEnglish(): Map<string, string> {
   // —— 诊断导出（0.17.97）——
   map.set('存文件', 'Save to file');
   map.set('合计', 'Total');
+  map.set('首页动态图', 'Home illustration');
   map.set('显示桌宠', 'Show pet');
   map.set('显示中', 'Visible');
   map.set('已隐藏', 'Hidden');

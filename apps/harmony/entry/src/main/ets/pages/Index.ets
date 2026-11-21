@@ -46,6 +46,7 @@ struct Index {
   /** 设置项镜像：直接读 runtime 字段不会触发重建，第一次点选会「看起来没反应」。 */
   @State uiShowInspector: boolean = false;
   @State uiPetEnabled: boolean = true;
+  @State uiHomeMascot: boolean = true;
   @State uiThemeTint: number = 0;
   @State uiCompactHistory: boolean = false;
   @State uiSecretMask: boolean = false;
@@ -638,6 +639,7 @@ struct Index {
     }
     this.uiShowInspector = this.runtime.showInspector;
     this.uiPetEnabled = this.runtime.petEnabled;
+    this.uiHomeMascot = this.runtime.homeMascotEnabled;
     this.uiThemeTint = this.runtime.themeTint;
     this.uiCompactHistory = this.runtime.compactHistory;
     this.uiSecretMask = this.runtime.secretMask;
@@ -3004,6 +3006,13 @@ struct Index {
                   }
                 });
               })
+              this.SettingsRow(this.tr('首页动态图'),
+                this.uiHomeMascot ? this.tr('显示') : this.tr('隐藏'),
+                false, () => {
+                  this.uiHomeMascot = !this.uiHomeMascot;
+                  this.settingsRev = this.settingsRev + 1;
+                  this.runtime.setHomeMascotEnabled(this.uiHomeMascot);
+                })
               this.SettingsRow(this.tr('桌宠'),
                 this.uiPetEnabled ? this.tr('开 · 干活/等确认/完成 四态') : this.tr('关'),
                 false, () => {
@@ -4390,13 +4399,15 @@ struct Index {
           .scale({ x: this.maidBob ? 1 : 0.86 })
           .opacity(this.maidBob ? 0.9 : 0.6)
           .animation({ duration: 2000, curve: Curve.EaseInOut })
-        Image($r('app.media.maid_mascot'))
-          .width(158)
-          .height(204)
-          .objectFit(ImageFit.Contain)
-          .translate({ y: this.maidBob ? -7 : 0 })
-          .rotate({ angle: this.maidBob ? 1.2 : -1.2 })
-          .animation({ duration: 2000, curve: Curve.EaseInOut })
+        if (this.uiHomeMascot) {
+          Image($r('app.media.maid_mascot'))
+            .width(158)
+            .height(204)
+            .objectFit(ImageFit.Contain)
+            .translate({ y: this.maidBob ? -7 : 0 })
+            .rotate({ angle: this.maidBob ? 1.2 : -1.2 })
+            .animation({ duration: 2000, curve: Curve.EaseInOut })
+        }
       }
       .height(190)
       .width('100%')

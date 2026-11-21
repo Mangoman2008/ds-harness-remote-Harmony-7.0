@@ -158,6 +158,8 @@ function buildEnglish(): Map<string, string> {
   map.set('权限：工作区可写', 'Permission: workspace write');
   map.set('权限：完全权限', 'Permission: full access');
   map.set(' 步 · ', ' steps · ');
+  map.set('思考', 'Thinking');
+  map.set('已复制整段代码', 'Code block copied');
   map.set('收起', 'collapse');
   map.set('展开', 'expand');
   map.set('回到最新', 'Jump to latest');

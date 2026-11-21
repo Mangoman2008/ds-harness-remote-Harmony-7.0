@@ -335,6 +335,8 @@ struct Index {
   /** 录音已停止、等主机转写。 */
   /** 被手动展开的连续工具调用段（键是段首工具的 id）。 */
   @State expandedRuns: string[] = [];
+  /** 哪些消息的「思考」被展开（默认折叠成两行）。 */
+  @State expandedReasoning: string[] = [];
   private windowChromeDark: boolean = false;
   private chromeApplied: boolean = false;
 
@@ -2170,6 +2172,26 @@ struct Index {
       return item.questionOutcome.length === 0;
     }
     return false;
+  }
+
+  private reasoningOpen(item: ChatItem): boolean {
+    return this.expandedReasoning.includes(item.id);
+  }
+
+  private toggleReasoning(item: ChatItem): void {
+    const next: string[] = [];
+    let removed: boolean = false;
+    for (const id of this.expandedReasoning) {
+      if (id === item.id) {
+        removed = true;
+      } else {
+        next.push(id);
+      }
+    }
+    if (!removed) {
+      next.push(item.id);
+    }
+    this.expandedReasoning = next;
   }
 
   private isRunExpanded(headId: string): boolean {
@@ -5342,8 +5364,11 @@ struct Index {
           Row({ space: 8 }) {
             ForEach(this.pendingFiles, (file: PromptFilePart, index: number) => {
               Row({ space: 6 }) {
-                Text('📄')
-                  .fontSize(this.fs(12))
+                Image($r('app.media.ic_attach_file'))
+                  .width(this.fs(12))
+                  .height(this.fs(12))
+                  .fillColor(this.pal().text3)
+                  .objectFit(ImageFit.Contain)
                 Text(file.bytes > 0 ? file.name + ' · ' + sizeLabel(file.bytes) : file.name)
                   .fontSize(this.fs(11))
                   .fontColor(this.pal().text2)
@@ -5459,9 +5484,11 @@ struct Index {
           })
           // 文件键：和图片键同规格，左边再挂一枚
           Row() {
-            Text('📄')
-              .fontSize(this.fs(14))
-              .fontColor(this.pal().text2)
+            Image($r('app.media.ic_attach_file'))
+              .width(this.fs(18))
+              .height(this.fs(18))
+              .fillColor(this.pal().text2)
+              .objectFit(ImageFit.Contain)
           }
           .width(this.compactDock() ? 30 : 34)
           .height(this.compactDock() ? 40 : 46)
@@ -7291,25 +7318,42 @@ struct Index {
           .clip(true)
         } else if (line.imageSrc.length > 0) {
           this.MdImage(line)
-        } else if (line.code) {
-          Text(line.text)
-            .fontSize(this.fs(12))
-            .fontFamily('monospace')
-            .fontColor(this.pal().text2)
+        } else if (line.codeLines.length > 0) {
+          Column({ space: 0 }) {
+            if (line.codeLang.length > 0) {
+              Text(line.codeLang)
+                .fontSize(this.fs(10))
+                .fontColor(this.pal().text3)
+                .width('100%')
+                .padding({ left: 8, right: 8, top: 6 })
+                .textAlign(TextAlign.Start)
+            }
+            Column({ space: 0 }) {
+              ForEach(line.codeLines, (codeLine: string, ci: number) => {
+                Text(codeLine.length > 0 ? codeLine : ' ')
+                  .fontSize(this.fs(12))
+                  .fontFamily('monospace')
+                  .fontColor(this.pal().text2)
+                  .width('100%')
+                  .textAlign(TextAlign.Start)
+                  .copyOption(CopyOptions.LocalDevice)
+              }, (codeLine: string, ci: number) => 'code:' + ci + ':' + codeLine)
+            }
             .width('100%')
-            .padding(8)
-            .backgroundColor(this.pal().inputBg)
-            .borderRadius(6)
-            .wordBreak(WordBreak.BREAK_ALL)
-            .textAlign(TextAlign.Start)
-            // 代码行：可选中，也可以长按整行复制（子组件的长按优先于消息菜单）
-            .copyOption(CopyOptions.LocalDevice)
-            .gesture(LongPressGesture().onAction(() => {
-              const data: pasteboard.PasteData = pasteboard.createData(pasteboard.MIMETYPE_TEXT_PLAIN, line.text);
-              pasteboard.getSystemPasteboard().setData(data).then(() => {
-                promptAction.showToast({ message: this.tr('已复制该行') });
-              }).catch(() => undefined);
-            }))
+            .padding({ left: 8, right: 8, top: 6, bottom: 8 })
+            .alignItems(HorizontalAlign.Start)
+          }
+          .width('100%')
+          .backgroundColor(this.pal().inputBg)
+          .borderRadius(8)
+          .clip(true)
+          .gesture(LongPressGesture().onAction(() => {
+            const data: pasteboard.PasteData = pasteboard.createData(
+              pasteboard.MIMETYPE_TEXT_PLAIN, line.codeLines.join(String.fromCharCode(10)));
+            pasteboard.getSystemPasteboard().setData(data).then(() => {
+              promptAction.showToast({ message: this.tr('已复制整段代码') });
+            }).catch(() => undefined);
+          }))
         } else if (line.bullet) {
           Row({ space: 6 }) {
             Text('·')
@@ -7872,12 +7916,30 @@ struct Index {
       Row() {
         Column({ space: 6 }) {
           if (item.reasoning.length > 0) {
-            Text(item.reasoning)
-              .fontSize(this.fs(12))
-              .fontColor(this.pal().text2)
-              .maxLines(8)
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .textAlign(TextAlign.Start)
+            Column({ space: 3 }) {
+              Row({ space: 6 }) {
+                Text(this.tr('思考'))
+                  .fontSize(this.fs(10))
+                  .fontColor(this.pal().text3)
+                Text(this.reasoningOpen(item) ? this.tr('收起') : this.tr('展开'))
+                  .fontSize(this.fs(10))
+                  .fontColor('#22D3EE')
+              }
+              .onClick(() => {
+                this.toggleReasoning(item);
+              })
+              Text(item.reasoning)
+                .fontSize(this.fs(12))
+                .fontColor(this.pal().text2)
+                .maxLines(this.reasoningOpen(item) ? 400 : 2)
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+                .textAlign(TextAlign.Start)
+            }
+            .width('100%')
+            .padding({ left: 8, right: 8, top: 6, bottom: 6 })
+            .backgroundColor(this.pal().chip)
+            .borderRadius(8)
+            .alignItems(HorizontalAlign.Start)
           }
           if (item.text.length > 0 && this.heartbeatBody(item).length > 0) {
             // 巡检心跳：默认只显示可读正文，标签原文折叠起来
@@ -10032,6 +10094,10 @@ class MdLine {
   imageAlt: string = '';
   /** 非空表示这一行整行就是一个链接。 */
   linkUrl: string = '';
+  /** 非空表示这一段是整块代码（不再逐行切成小块）。 */
+  codeLines: string[] = [];
+  /** 代码块语言标注（```bash 里的 bash），没有就是空串。 */
+  codeLang: string = '';
   /** 非空表示这一块是 GFM 表格：表头 + 数据行（每行是单元格文本）。 */
   tableHeader: string[] = [];
   tableRows: string[][] = [];
@@ -10108,19 +10174,30 @@ function markdownLines(source: string): MdLine[] {
   const out: MdLine[] = [];
   const raw: string[] = source.split(String.fromCharCode(10));
   let inCode: boolean = false;
+  let codeLang: string = '';
+  let codeBuffer: string[] = [];
   for (const original of raw) {
     const line: string = original.trimEnd();
     if (line.trim().startsWith('```')) {
-      inCode = !inCode;
+      if (inCode) {
+        // 收尾：把缓冲的代码行合成一个整块，保留缩进（不再 trimStart）
+        if (codeBuffer.length > 0) {
+          const block: MdLine = new MdLine();
+          block.codeLines = codeBuffer.slice();
+          block.codeLang = codeLang;
+          out.push(block);
+        }
+        codeBuffer = [];
+        codeLang = '';
+        inCode = false;
+      } else {
+        inCode = true;
+        codeLang = line.trim().substring(3).trim();
+      }
       continue;
     }
     if (inCode) {
-      if (line.length > 0) {
-        const code: MdLine = new MdLine();
-        code.text = line;
-        code.code = true;
-        out.push(code);
-      }
+      codeBuffer.push(original);
       continue;
     }
     if (line.trim().length === 0) {

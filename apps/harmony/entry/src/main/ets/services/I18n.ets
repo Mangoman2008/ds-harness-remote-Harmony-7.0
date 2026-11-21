@@ -177,6 +177,7 @@ function buildEnglish(): Map<string, string> {
   map.set('思考', 'Thinking');
   map.set('已复制整段代码', 'Code block copied');
   map.set('复制回复', 'Copy reply');
+  map.set('未分组', 'Ungrouped');
   map.set('已复制回复', 'Reply copied');
   map.set('收起', 'collapse');
   map.set('展开', 'expand');

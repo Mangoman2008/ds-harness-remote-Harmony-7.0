@@ -337,6 +337,8 @@ struct Index {
   @State expandedRuns: string[] = [];
   /** 哪些消息的「思考」被展开（默认折叠成两行）。 */
   @State expandedReasoning: string[] = [];
+  /** 列表里被折叠的工作区分组（存组标题）。 */
+  @State collapsedWorkspaces: string[] = [];
   private windowChromeDark: boolean = false;
   private chromeApplied: boolean = false;
 
@@ -1328,7 +1330,7 @@ struct Index {
       list.push(session);
     }
     // 置顶最先，其次运行中，其余保持服务端给的时间顺序
-    return list.sort((a: HarnessRemoteSession, b: HarnessRemoteSession) => {
+    const sorted: HarnessRemoteSession[] = list.sort((a: HarnessRemoteSession, b: HarnessRemoteSession) => {
       const aPin: number = this.runtime.isPinnedSession(a.sessionId) ? 1 : 0;
       const bPin: number = this.runtime.isPinnedSession(b.sessionId) ? 1 : 0;
       if (aPin !== bPin) {
@@ -1338,6 +1340,21 @@ struct Index {
       const bRunning: number = b.running ? 1 : 0;
       return bRunning - aRunning;
     });
+    // 折叠的工作区：只留第一行当组头（搜索时不折叠，让人看全结果）
+    if (this.sessionSearchActive || this.collapsedWorkspaces.length === 0) {
+      return sorted;
+    }
+    const kept: HarnessRemoteSession[] = [];
+    const seen: string[] = [];
+    for (const session of sorted) {
+      const label: string = this.workspaceGroupLabel(session);
+      const first: boolean = !seen.includes(label);
+      seen.push(label);
+      if (first || !this.collapsedWorkspaces.includes(label)) {
+        kept.push(session);
+      }
+    }
+    return kept;
   }
 
   /** 最近访问的会话标题；列表里没有（已归档/换主机）时给个短 id。 */
@@ -1956,16 +1973,61 @@ struct Index {
   }
 
   /** 会话列表分组：新会话不再一个个孤立，按 今天/昨天/更早 归堆。 */
+  /** 列表分组依据：工作区（没有 cwd 的会话归「未分组」）。 */
+  private workspaceGroupLabel(session: HarnessRemoteSession): string {
+    return session.cwd.length > 0 ? cwdTail(session.cwd) : this.tr('未分组');
+  }
+
+  /** 同一工作区被折叠时，只留第一行当「组头」。 */
+  private isWorkspaceCollapsed(session: HarnessRemoteSession): boolean {
+    return this.collapsedWorkspaces.includes(this.workspaceGroupLabel(session));
+  }
+
+  private toggleWorkspaceGroup(label: string): void {
+    const next: string[] = [];
+    let removed: boolean = false;
+    for (const item of this.collapsedWorkspaces) {
+      if (item === label) {
+        removed = true;
+      } else {
+        next.push(item);
+      }
+    }
+    if (!removed) {
+      next.push(label);
+    }
+    this.collapsedWorkspaces = next;
+  }
+
+  /** 该工作区里有多少会话（折叠时组头要显示条数）。 */
+  private workspaceGroupCount(label: string): number {
+    let count: number = 0;
+    for (const session of this.visibleSessions()) {
+      if (this.workspaceGroupLabel(session) === label) {
+        count += 1;
+      }
+    }
+    return count;
+  }
+
   private sessionGroupGap(index: number): string {
     const list: HarnessRemoteSession[] = this.visibleSessions();
     if (index < 0 || index >= list.length) {
       return '';
     }
-    const label: string = sessionGroupLabel(list[index].updatedAt);
+    // 搜索时按时间平铺，不插组头
+    if (this.sessionSearchActive) {
+      const label: string = sessionGroupLabel(list[index].updatedAt);
+      if (index === 0) {
+        return label;
+      }
+      return sessionGroupLabel(list[index - 1].updatedAt) === label ? '' : label;
+    }
+    const label: string = this.workspaceGroupLabel(list[index]);
     if (index === 0) {
       return label;
     }
-    return sessionGroupLabel(list[index - 1].updatedAt) === label ? '' : label;
+    return this.workspaceGroupLabel(list[index - 1]) === label ? '' : label;
   }
 
   /** 标题旁的连接状态点：重连中黄、已断开红、其余绿。 */
@@ -6064,11 +6126,31 @@ struct Index {
           ListItem() {
             Column() {
             if (this.sessionGroupGap(index).length > 0) {
-              Text(this.tr(this.sessionGroupGap(index)))
-                .fontSize(this.fs(11))
-                .fontColor(this.pal().text3)
-                .width('100%')
-                .padding({ left: 4, top: index === 0 ? 0 : 10, bottom: 4 })
+              Row({ space: 6 }) {
+                Text(this.tr(this.sessionGroupGap(index)))
+                  .fontSize(this.fs(11))
+                  .fontColor(this.pal().text3)
+                if (!this.sessionSearchActive) {
+                  Text('' + this.workspaceGroupCount(this.sessionGroupGap(index)))
+                    .fontSize(this.fs(10))
+                    .fontColor(this.pal().text3)
+                }
+                if (!this.sessionSearchActive) {
+                  Text(this.collapsedWorkspaces.includes(this.sessionGroupGap(index))
+                    ? this.tr('展开') : this.tr('收起'))
+                    .fontSize(this.fs(10))
+                    .fontColor('#22D3EE')
+                }
+                Blank()
+              }
+              .width('100%')
+              .padding({ left: 4, right: 4, top: index === 0 ? 0 : 10, bottom: 4 })
+              .onClick(() => {
+                if (this.sessionSearchActive) {
+                  return;
+                }
+                this.toggleWorkspaceGroup(this.sessionGroupGap(index));
+              })
             }
             Row({ space: 10 }) {
               Column()

@@ -1632,7 +1632,19 @@ struct Index {
     return '🌙';
   }
 
-  /** 停掉精灵图帧循环。 */
+  /** 自备桌宠素材的规格说明（写清目录、清单字段与图片要求）。 */
+  private petSpecText(): string {
+    return this.tr('素材说明') + '\n'
+      + this.tr('目录') + '：' + PetPack.userPackPath() + '\n'
+      + this.tr('清单') + '：pack.json（' + this.tr('结构同内置包') + '）\n'
+      + this.tr('字段') + '：animations.{idle,typing,thinking,happy,sleeping}，'
+      + this.tr('每项含 sheet / frameW / frameH / frames[{i,ms}]') + '\n'
+      + this.tr('图片') + '：PNG，横向精灵图，帧宽高需与 frameW/frameH 一致；'
+      + this.tr('建议单帧 128–256px、整图不超过 4096px 宽') + '\n'
+      + this.tr('可选') + '：只提供 idle 也能用，其余状态自动回落到 idle。';
+  }
+
+  /** 停掉精灵图帧循环。 */  /** 停掉精灵图帧循环。 */
   private stopPetAnimation(): void {
     if (this.petTimer >= 0) {
       clearTimeout(this.petTimer);
@@ -2934,6 +2946,32 @@ struct Index {
                   this.uiPetEnabled = !this.uiPetEnabled;
                   this.settingsRev = this.settingsRev + 1;
                   this.runtime.setPetEnabled(this.uiPetEnabled);
+                })
+              this.SettingsRow(this.tr('桌宠素材'),
+                PetPack.ready()
+                  ? (PetPack.packSource() + ' · ' + PetPack.animNames())
+                  : this.tr('未安装（用 emoji）'),
+                false, () => {
+                  AlertDialog.show({
+                    title: this.tr('桌宠素材规格'),
+                    message: this.petSpecText(),
+                    autoCancel: true,
+                    primaryButton: {
+                      value: this.tr('重新加载'),
+                      action: () => {
+                        PetPack.reload(getContext(this)).then(() => {
+                          this.restartPetAnimation();
+                          promptAction.showToast({ message: PetPack.ready()
+                            ? (this.tr('已加载：') + PetPack.packSource())
+                            : this.tr('没有找到可用素材，继续用 emoji') });
+                        }).catch(() => undefined);
+                      }
+                    },
+                    secondaryButton: {
+                      value: this.tr('关闭'),
+                      action: () => undefined
+                    }
+                  });
                 })
               this.SettingsRow(this.tr('主题色'), this.themeTintLabel(), false, () => {
                 AlertDialog.show({

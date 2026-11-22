@@ -12,6 +12,7 @@ import { RemoteClientCore, RemoteClientError } from '../net/RemoteClientCore';
 import { RemoteGateway, RemoteGatewayError, RemoteHostFeatures } from '../net/RemoteGateway';
 import { TerminalAttachment, TerminalDimensions, TerminalInfo, TerminalSession } from '../net/TerminalSession';
 import { HostPluginBundle } from '../net/PluginInventory';
+import { BotCatalogRow, parseBotCatalog } from '../net/BotCatalog';
 import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRemoteSession,
   DirectoryEntry, HarnessSchedule, HarnessScheduleDelivery, HarnessSessionEvent, HarnessWorkspace,
   HarnessWorkspaceSnapshot, HistoryPage, PromptImagePart, PromptFilePart } from '../net/HarnessClient';
@@ -752,6 +753,18 @@ export class AppRuntime {
     this.setBusy(false);
     this.notify();
     return undefined;
+  }
+
+  /** DS-Bot 目录（机器人 + 群组）；主机没装 DS-Bot 时抛 BOT_NOT_INSTALLED。 */
+  async fetchBotCatalog(): Promise<BotCatalogRow[]> {
+    const core: RemoteClientCore | undefined = this.core;
+    if (core === undefined) {
+      throw new Error('尚未连接主机');
+    }
+    const body: Record<string, Object | null> = { 'endpoint': 'state', 'payload': null };
+    const request: Record<string, Object> = { 'route': 'api/bot', 'body': body };
+    const value: Object = await core.rpc('plugin.route.call', request);
+    return parseBotCatalog(value);
   }
 
   /** 会员状态：设置页显示，不用登录态以外的信息。 */

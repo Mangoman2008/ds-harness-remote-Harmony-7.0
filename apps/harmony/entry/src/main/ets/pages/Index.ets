@@ -11,6 +11,7 @@ import { AppRuntime, ChatItem, ChatQuestion, DEFAULT_SERVER_URL, DEFAULT_ACCOUNT
 import { RemoteHostDevice } from '../model/Types';
 import { DirectoryEntry, HarnessWorkspace } from '../net/HarnessClient';
 import { HostPluginBundle, HostPluginRow } from '../net/PluginInventory';
+import { BotCatalogRow } from '../net/BotCatalog';
 import { HarnessRemoteSession, HarnessSchedule, HarnessScheduleDelivery } from '../net/HarnessClient';
 import { applyTint, darkPalette, lightPalette, Palette } from '../services/Theme';
 import { OAuthProvider, clientVersion as appVersion } from '../net/ServerApi';
@@ -361,6 +362,11 @@ struct Index {
   @State pluginsError: string = '';
   @State pluginsRev: number = 0;
   private hostPlugins: HostPluginBundle[] = [];
+  /** DS-Bot 目录（机器人 + 群组）。 */
+  @State botsOpen: boolean = false;
+  @State botsLoading: boolean = false;
+  @State botsError: string = '';
+  private bots: BotCatalogRow[] = [];
   private windowChromeDark: boolean = false;
   private chromeApplied: boolean = false;
 
@@ -2601,6 +2607,9 @@ struct Index {
       if (this.tintPickerOpen) {
         this.TintPickerOverlay()
       }
+      if (this.botsOpen) {
+        this.BotsOverlay()
+      }
       if (this.pluginsOpen) {
         this.PluginsOverlay()
       }
@@ -3135,6 +3144,11 @@ struct Index {
                   this.settingsRev = this.settingsRev + 1;
                   this.runtime.setSecretMask(this.uiSecretMask);
                 })
+              this.SettingsRow(this.tr('DS-Bot'),
+                this.bots.length > 0 ? ('' + this.bots.length + ' ' + this.tr('个')) : this.tr('查看机器人/群组'),
+                false, () => {
+                  this.openBotsOverlay();
+                })
               this.SettingsRow(this.tr('会员'),
                 this.membershipLabel(),
                 false, () => {
@@ -3355,6 +3369,27 @@ struct Index {
       logWarn('home mascot pick failed: ' + errorMessage(error));
       promptAction.showToast({ message: this.tr('选图失败，换一张试试') });
     }
+  }
+
+  /** 打开 DS-Bot 目录：主机没装时给出明确提示。 */
+  private openBotsOverlay(): void {
+    this.botsOpen = true;
+    this.botsLoading = true;
+    this.botsError = '';
+    this.runtime.fetchBotCatalog().then((rows: BotCatalogRow[]) => {
+      this.bots = rows;
+      this.botsLoading = false;
+    }).catch((error: Error) => {
+      this.botsLoading = false;
+      const message: string = errorMessage(error);
+      if (message.indexOf('BOT_NOT_INSTALLED') >= 0) {
+        this.botsError = this.tr('此主机未安装 DS-Bot');
+      } else if (message.indexOf('BOT_UNSUPPORTED') >= 0) {
+        this.botsError = this.tr('此主机未开放 DS-Bot');
+      } else {
+        this.botsError = message;
+      }
+    });
   }
 
   /** 打开插件管理：读一次宿主的插件清单。 */
@@ -9078,6 +9113,101 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** DS-Bot 目录：机器人/群组列表，只读。 */
+  @Builder
+  BotsOverlay() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Text(this.tr('DS-Bot'))
+          .fontSize(this.fs(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text)
+        Blank()
+        Text(this.tr('刷新'))
+          .fontSize(this.fs(12))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.openBotsOverlay();
+          })
+        Text(this.tr('收起'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.botsOpen = false;
+          })
+      }
+      .width('100%')
+
+      if (this.botsLoading) {
+        Row({ space: 8 }) {
+          LoadingProgress().width(16).height(16).color('#22D3EE')
+          Text(this.tr('读取 DS-Bot…')).fontSize(this.fs(12)).fontColor(this.pal().text3)
+        }
+      } else if (this.botsError.length > 0) {
+        Text(this.botsError)
+          .fontSize(this.fs(12))
+          .fontColor('#F5A623')
+          .width('100%')
+      } else if (this.bots.length === 0) {
+        Text(this.tr('暂无机器人或群组'))
+          .fontSize(this.fs(12))
+          .fontColor(this.pal().text3)
+      } else {
+        List({ space: 8 }) {
+          ForEach(this.bots, (bot: BotCatalogRow) => {
+            ListItem() {
+              Row({ space: 10 }) {
+                Text(bot.room ? '群' : '机')
+                  .fontSize(this.fs(10))
+                  .fontColor('#22D3EE')
+                  .width(22)
+                  .height(22)
+                  .textAlign(TextAlign.Center)
+                  .backgroundColor('rgba(34,211,238,0.12)')
+                  .borderRadius(6)
+                Column({ space: 2 }) {
+                  Text(bot.name)
+                    .fontSize(this.fs(13))
+                    .fontColor(this.pal().text)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  Text(bot.room
+                    ? ('' + bot.memberIds.length + ' ' + this.tr('个成员'))
+                    : (bot.role.length > 0 ? bot.role : this.tr('机器人')) + (bot.model.length > 0 ? ' · ' + bot.model : ''))
+                    .fontSize(this.fs(10))
+                    .fontColor(this.pal().text3)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                }
+                .alignItems(HorizontalAlign.Start)
+                .layoutWeight(1)
+                if (bot.pinned) {
+                  Text(this.tr('置顶'))
+                    .fontSize(this.fs(9))
+                    .fontColor('#4D6BFE')
+                }
+              }
+              .width('100%')
+              .padding(10)
+              .backgroundColor(this.pal().card)
+              .borderRadius(10)
+              .border({ width: 1, color: this.pal().border })
+            }
+          }, (bot: BotCatalogRow) => 'bot:' + bot.id)
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .scrollBar(BarState.Off)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 14, right: 14, top: 14, bottom: 18 })
+    .backgroundColor(this.pal().bg)
   }
 
   /** 插件管理：列出主机插件包与其中的插件，可启停（写操作交给宿主裁决）。 */

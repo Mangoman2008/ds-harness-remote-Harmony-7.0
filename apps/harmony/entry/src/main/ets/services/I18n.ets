@@ -260,6 +260,15 @@ function buildEnglish(): Map<string, string> {
   map.set('合计', 'Total');
   map.set('验证码或恢复码', 'Verification or recovery code');
   map.set('重新输入密码', 'Enter password again');
+  map.set('DS-Bot', 'DS-Bot');
+  map.set('查看机器人/群组', 'View bots / rooms');
+  map.set('读取 DS-Bot…', 'Reading DS-Bot…');
+  map.set('此主机未安装 DS-Bot', 'DS-Bot is not installed on this Host');
+  map.set('此主机未开放 DS-Bot', 'DS-Bot is not enabled on this Host');
+  map.set('暂无机器人或群组', 'No bots or rooms yet');
+  map.set('个成员', 'members');
+  map.set('个', '');
+  map.set('机器人', 'Bot');
   map.set('会员', 'Membership');
   map.set('有效', 'Active');
   map.set('有效 · 到期 ', 'Active · renews ');

@@ -260,6 +260,13 @@ function buildEnglish(): Map<string, string> {
   map.set('合计', 'Total');
   map.set('验证码或恢复码', 'Verification or recovery code');
   map.set('重新输入密码', 'Enter password again');
+  map.set('终端', 'Terminal');
+  map.set('可输入', 'Writable');
+  map.set('打开会话终端', 'Open session terminal');
+  map.set('无法打开终端', 'Cannot open terminal');
+  map.set('正在连接终端…', 'Connecting terminal…');
+  map.set('输入命令后回车', 'Type a command and press Enter');
+  map.set('发送', 'Send');
   map.set('首页动态图', 'Home illustration');
   map.set('自定义图片', 'Custom image');
   map.set('内置立绘', 'Built-in art');

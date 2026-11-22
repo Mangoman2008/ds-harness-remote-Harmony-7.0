@@ -10,6 +10,7 @@ import { CloseVerdict, RelayConnectionInfo, RelayTransport, RelayTransportOption
 import { SecureTransport } from '../net/SecureTransport';
 import { RemoteClientCore, RemoteClientError } from '../net/RemoteClientCore';
 import { RemoteGateway, RemoteGatewayError, RemoteHostFeatures } from '../net/RemoteGateway';
+import { TerminalAttachment, TerminalDimensions, TerminalInfo, TerminalSession } from '../net/TerminalSession';
 import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRemoteSession,
   DirectoryEntry, HarnessSchedule, HarnessScheduleDelivery, HarnessSessionEvent, HarnessWorkspace,
   HarnessWorkspaceSnapshot, HistoryPage, PromptImagePart, PromptFilePart } from '../net/HarnessClient';
@@ -396,6 +397,11 @@ export class AppRuntime {
   themeTint: number = 0;
   /** 桌宠（鲸娘）开关。 */
   petEnabled: boolean = true;
+  /** 当前连接的 Gateway（终端等功能要用它开流）。 */
+  private activeGateway: RemoteGateway | undefined = undefined;
+  private terminalSession: TerminalSession | undefined = undefined;
+  private terminalAttachment: TerminalAttachment | undefined = undefined;
+
   /** 首页（设备列表）那张会呼吸的立绘是否显示。 */
   homeMascotEnabled: boolean = true;
   /** 自定义首页立绘（压缩后的 JPEG base64）；空 = 用内置资源图。 */
@@ -747,6 +753,55 @@ export class AppRuntime {
     return undefined;
   }
 
+  /** 打开（或复用）一个会话终端，把输出喂给回调。 */
+  async openTerminal(onOutput: (data: string) => void,
+    onState: (writable: boolean, running: boolean) => void): Promise<string> {
+    const gateway: RemoteGateway | undefined = this.activeGateway;
+    const sessionId: string = this.currentSessionId;
+    if (gateway === undefined || sessionId.length === 0) {
+      throw new Error('还没连上会话');
+    }
+    if (this.terminalAttachment !== undefined) {
+      return '已打开';
+    }
+    const session: TerminalSession = new TerminalSession(gateway, sessionId);
+    this.terminalSession = session;
+    await session.load();
+    const size: TerminalDimensions = new TerminalDimensions();
+    size.cols = 100;
+    size.rows = 30;
+    const info: TerminalInfo = await session.create(size);
+    const attachment: TerminalAttachment = new TerminalAttachment(session, info.id, 8192);
+    this.terminalAttachment = attachment;
+    attachment.onOutput = async (data: string, reset: boolean): Promise<void> => {
+      onOutput(data);
+    };
+    attachment.onState = (writable: boolean, running: boolean) => {
+      onState(writable, running);
+    };
+    attachment.onFailure = () => {
+      onState(false, false);
+    };
+    await attachment.open();
+    return info.title.length > 0 ? info.title : info.id;
+  }
+
+  /** 往终端写按键/整行（用户输入）。 */
+  writeTerminal(data: string): void {
+    if (this.terminalAttachment !== undefined) {
+      this.terminalAttachment.write(data);
+    }
+  }
+
+  /** 关闭终端流。 */
+  closeTerminal(): void {
+    if (this.terminalAttachment !== undefined) {
+      this.terminalAttachment.dispose();
+      this.terminalAttachment = undefined;
+    }
+    this.terminalSession = undefined;
+  }
+
   async refreshDevices(): Promise<void> {
     if (this.phase !== PHASE_DEVICES) {
       return;
@@ -942,6 +997,7 @@ export class AppRuntime {
       this.probeIceConfig(relay).catch(() => undefined);
       this.setConnectStage('读取主机能力…');
       const gateway: RemoteGateway = new RemoteGateway(core);
+      this.activeGateway = gateway;
       // 能力探测是每次连接一个 RPC 往返；主机版本不变就没有重新探测的必要
       const featureKey: string = host.clientVersion + '|' + host.harnessVersion;
       let features: RemoteHostFeatures | undefined = this.featuresCacheKey === featureKey

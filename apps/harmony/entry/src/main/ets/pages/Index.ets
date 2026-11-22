@@ -346,6 +346,14 @@ struct Index {
   @State collapsedWorkspaces: string[] = [];
   /** 「最近」入口是否展开（默认收起，不再常驻占一行）。 */
   @State recentOpen: boolean = false;
+  /** 终端浮层：输出缓冲 + 可否输入 + 运行状态。 */
+  @State terminalOpen: boolean = false;
+  @State terminalText: string = '';
+  @State terminalWritable: boolean = false;
+  @State terminalRunning: boolean = false;
+  @State terminalBusy: boolean = false;
+  @State terminalTitle: string = '';
+  @State terminalInput: string = '';
   private windowChromeDark: boolean = false;
   private chromeApplied: boolean = false;
 
@@ -2586,6 +2594,9 @@ struct Index {
       if (this.tintPickerOpen) {
         this.TintPickerOverlay()
       }
+      if (this.terminalOpen) {
+        this.TerminalOverlay()
+      }
       if (this.diagnosticsOpen) {
         this.DiagnosticsOverlay()
       }
@@ -3114,6 +3125,11 @@ struct Index {
                   this.settingsRev = this.settingsRev + 1;
                   this.runtime.setSecretMask(this.uiSecretMask);
                 })
+              this.SettingsRow(this.tr('终端'),
+                this.terminalRunning ? this.tr('运行中') : this.tr('打开会话终端'),
+                false, () => {
+                  this.openTerminalOverlay();
+                })
               this.SettingsRow(this.tr('连接诊断'),
                 this.connectedTransport.length > 0 ? this.transportBadgeText() : this.tr('未连接'), false, () => {
                   const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
@@ -3316,6 +3332,52 @@ struct Index {
       logWarn('home mascot pick failed: ' + errorMessage(error));
       promptAction.showToast({ message: this.tr('选图失败，换一张试试') });
     }
+  }
+
+  /** 打开会话终端：拉一个流，输出滚进缓冲区。 */
+  private openTerminalOverlay(): void {
+    if (this.terminalBusy) {
+      return;
+    }
+    this.terminalBusy = true;
+    this.terminalOpen = true;
+    this.terminalText = '';
+    this.terminalTitle = '';
+    this.runtime.openTerminal((data: string) => {
+      const next: string = this.terminalText + data;
+      // 只留最后 120k 字符，长了就截断，别把内存吃满
+      this.terminalText = next.length > 120000 ? next.substring(next.length - 120000) : next;
+    }, (writable: boolean, running: boolean) => {
+      this.terminalWritable = writable;
+      this.terminalRunning = running;
+      if (!running) {
+        this.terminalBusy = false;
+      }
+    }).then((title: string) => {
+      this.terminalTitle = title;
+      this.terminalBusy = false;
+      this.terminalRunning = true;
+    }).catch((error: Error) => {
+      this.terminalBusy = false;
+      this.terminalRunning = false;
+      this.terminalText = this.tr('无法打开终端') + '：' + errorMessage(error);
+    });
+  }
+
+  private closeTerminalOverlay(): void {
+    this.runtime.closeTerminal();
+    this.terminalOpen = false;
+    this.terminalRunning = false;
+    this.terminalWritable = false;
+  }
+
+  private sendTerminalInput(): void {
+    const text: string = this.terminalInput;
+    if (text.length === 0) {
+      return;
+    }
+    this.runtime.writeTerminal(text + String.fromCharCode(13));
+    this.terminalInput = '';
   }
 
   /** 密码登录：有挑战就走第二步，否则先拿挑战。 */
@@ -8943,6 +9005,88 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 会话终端：输出 + 一行输入（不做完整 ANSI 渲染，够用即可）。 */
+  @Builder
+  TerminalOverlay() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Text(this.tr('终端'))
+          .fontSize(this.fs(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text)
+        if (this.terminalTitle.length > 0) {
+          Text(this.terminalTitle)
+            .fontSize(this.fs(10))
+            .fontColor(this.pal().text3)
+            .maxLines(1)
+            .constraintSize({ maxWidth: 140 })
+        }
+        Blank()
+        Text(this.terminalWritable ? this.tr('可输入') : this.tr('只读'))
+          .fontSize(this.fs(10))
+          .fontColor(this.terminalWritable ? '#34D399' : this.pal().text3)
+        Text(this.tr('收起'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.closeTerminalOverlay();
+          })
+      }
+      .width('100%')
+
+      Scroll() {
+        Text(this.terminalText.length > 0 ? this.terminalText : this.tr('正在连接终端…'))
+          .fontSize(this.fs(11))
+          .fontFamily('monospace')
+          .fontColor(this.terminalText.length > 0 ? this.pal().text2 : this.pal().text3)
+          .width('100%')
+          .textAlign(TextAlign.Start)
+          .copyOption(CopyOptions.LocalDevice)
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .align(Alignment.TopStart)
+      .backgroundColor(this.pal().inputBg)
+      .borderRadius(10)
+      .padding(8)
+
+      Row({ space: 8 }) {
+        TextInput({ text: this.terminalInput, placeholder: this.tr('输入命令后回车') })
+          .layoutWeight(1)
+          .height(40)
+          .fontSize(this.fs(13))
+          .backgroundColor(this.pal().inputBg)
+          .fontColor(this.pal().text)
+          .placeholderColor(this.pal().text3)
+          .borderRadius(10)
+          .border({ width: 1, color: this.pal().border })
+          .padding({ left: 12, right: 12 })
+          .enabled(this.terminalWritable)
+          .onChange((value: string) => {
+            this.terminalInput = value;
+          })
+          .onSubmit(() => {
+            this.sendTerminalInput();
+          })
+        Text(this.tr('发送'))
+          .fontSize(this.fs(13))
+          .fontColor(this.terminalWritable ? '#22D3EE' : this.pal().text3)
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .backgroundColor('rgba(34,211,238,0.10)')
+          .borderRadius(10)
+          .onClick(() => {
+            this.sendTerminalInput();
+          })
+      }
+      .width('100%')
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 14, right: 14, top: 14, bottom: 18 })
+    .backgroundColor(this.pal().bg)
   }
 
   /** 连接诊断：现场排障不用连电脑抓 hilog。 */

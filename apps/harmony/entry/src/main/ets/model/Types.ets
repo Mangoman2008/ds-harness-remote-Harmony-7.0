@@ -18,6 +18,8 @@ export class AccountLoginResult {
   expiresAt: number = 0;
   account: string = '';
   isAdmin: boolean = false;
+  /** 账号开了两步验证时，服务端回的一次性挑战；非空表示还要再提交验证码。 */
+  challenge: string = '';
 }
 
 export class RemoteHostDevice {

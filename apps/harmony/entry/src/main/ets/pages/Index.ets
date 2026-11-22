@@ -271,6 +271,10 @@ struct Index {
   @State serverInput: string = '';
   @State emailInput: string = '';
   @State passwordInput: string = '';
+  /** 两步验证：服务端下发的一次性挑战（非空表示现在要输验证码/恢复码）。 */
+  @State passwordChallenge: string = '';
+  @State twoFactorCode: string = '';
+  private passwordChallengeServer: string = '';
   @State promptInput: string = '';
   @State qrUrl: string = '';
   @State providers: OAuthProvider[] = [];
@@ -3314,6 +3318,25 @@ struct Index {
     }
   }
 
+  /** 密码登录：有挑战就走第二步，否则先拿挑战。 */
+  private submitPasswordLogin(): void {
+    const server: string = this.serverInput;
+    const challenge: string = this.passwordChallengeServer === server ? this.passwordChallenge : '';
+    this.runtime.login(server, this.emailInput, this.passwordInput, challenge, this.twoFactorCode)
+      .then((next: string | undefined) => {
+        if (next !== undefined && next.length > 0 && this.serverInput === server) {
+          this.passwordChallengeServer = server;
+          this.passwordChallenge = next;
+          this.passwordInput = '';
+          this.twoFactorCode = '';
+        } else if (this.passwordChallenge.length > 0) {
+          this.passwordChallenge = '';
+          this.twoFactorCode = '';
+        }
+      })
+      .catch(() => undefined);
+  }
+
   private async openWallpaperPicker(): Promise<void> {
     try {
       const picked: PickedImage[] = await pickImages(1);
@@ -3948,8 +3971,33 @@ struct Index {
           this.passwordInput = value;
         })
         .onSubmit(() => {
-          this.runtime.login(this.serverInput, this.emailInput, this.passwordInput);
+          this.submitPasswordLogin();
         })
+      if (this.passwordChallenge.length > 0 && this.passwordChallengeServer === this.serverInput) {
+        TextInput({ text: this.twoFactorCode, placeholder: this.tr('验证码或恢复码') })
+          .height(48)
+          .backgroundColor(this.pal().chip)
+          .fontColor(this.pal().text)
+          .placeholderColor(this.pal().text3)
+          .caretColor('#22D3EE')
+          .borderRadius(14)
+          .border({ width: 1, color: 'rgba(34,211,238,0.45)' })
+          .padding({ left: 16, right: 16 })
+          .onChange((value: string) => {
+            this.twoFactorCode = value;
+          })
+          .onSubmit(() => {
+            this.submitPasswordLogin();
+          })
+        Text(this.tr('重新输入密码'))
+          .fontSize(this.fs(11))
+          .fontColor('#22D3EE')
+          .onClick(() => {
+            this.passwordChallenge = '';
+            this.twoFactorCode = '';
+            this.passwordChallengeServer = '';
+          })
+      }
       Button(this.tr('登录'))
         .width('100%')
         .height(50)
@@ -3962,7 +4010,7 @@ struct Index {
         .borderRadius(14)
         .enabled(!this.busy)
         .onClick(() => {
-          this.runtime.login(this.serverInput, this.emailInput, this.passwordInput);
+          this.submitPasswordLogin();
         })
       } else {
         Row({ space: 6 }) {

@@ -4,7 +4,7 @@ import { jsonStr, jsonNum, jsonBool, jsonArr, asArray, asRecord } from '../proto
 import { AccountLoginResult, TokenPair, RemoteHostDevice, AuthorizedPeerDevice, DeviceIdentity } from '../model/Types';
 
 /** Fallback when the bundle info cannot be read; must match AppScope/app.json5. */
-const CLIENT_VERSION_FALLBACK: string = '0.17.195-lan';
+const CLIENT_VERSION_FALLBACK: string = '0.17.196-lan';
 
 let clientVersionValue: string = CLIENT_VERSION_FALLBACK;
 
@@ -294,6 +294,25 @@ export class RemoteServerApi {
     return account;
   }
 
+  /** 用挑战 + 验证码/恢复码换取 token（两步验证第二步）。 */
+  async verifyAccountLogin(challenge: string, code: string): Promise<AccountLoginResult> {
+    const body: Record<string, Object> = {
+      'challenge': challenge,
+      'code': code.trim()
+    };
+    const text = await this.requestText('/api/v1/auth/2fa/verify', 'POST', JSON.stringify(body), undefined);
+    const root = JSON.parse(text) as Record<string, Object>;
+    const result = new AccountLoginResult();
+    result.token = jsonStr(root, 'token', '');
+    result.expiresAt = jsonNum(root, 'expiresAt', 0);
+    result.account = jsonStr(root, 'account', '');
+    result.isAdmin = jsonBool(root, 'isAdmin', false);
+    if (result.token.length < 16) {
+      throw new RemoteApiError('AUTH_INVALID', '两步验证未通过', 401);
+    }
+    return result;
+  }
+
   async loginAccount(email: string, password: string): Promise<AccountLoginResult> {
     const body: Record<string, Object> = {
       'email': email.trim(),
@@ -301,6 +320,15 @@ export class RemoteServerApi {
     };
     const text = await this.requestText('/api/v1/auth/login', 'POST', JSON.stringify(body), undefined);
     const root = JSON.parse(text) as Record<string, Object>;
+    // 账号开了两步验证：这一步只回挑战，不发 token
+    if (jsonBool(root, 'twoFactorRequired', false)) {
+      const pending = new AccountLoginResult();
+      pending.challenge = jsonStr(root, 'challenge', '');
+      if (!/^[A-Za-z0-9_-]{43}$/.test(pending.challenge)) {
+        throw new RemoteApiError('INVALID_MESSAGE', '服务端返回的两步验证挑战格式不对', 0);
+      }
+      return pending;
+    }
     const result = new AccountLoginResult();
     result.token = jsonStr(root, 'token', '');
     result.expiresAt = jsonNum(root, 'expiresAt', 0);

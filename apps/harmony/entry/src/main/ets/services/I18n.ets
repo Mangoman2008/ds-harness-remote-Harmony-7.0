@@ -258,6 +258,8 @@ function buildEnglish(): Map<string, string> {
   // —— 诊断导出（0.17.97）——
   map.set('存文件', 'Save to file');
   map.set('合计', 'Total');
+  map.set('验证码或恢复码', 'Verification or recovery code');
+  map.set('重新输入密码', 'Enter password again');
   map.set('首页动态图', 'Home illustration');
   map.set('自定义图片', 'Custom image');
   map.set('内置立绘', 'Built-in art');

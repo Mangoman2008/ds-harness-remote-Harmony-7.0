@@ -2,6 +2,8 @@ import { RemoteClientCore } from './RemoteClientCore';
 import { logInfo, logWarn, logError } from '../util/Log';
 import { RemoteGateway, RemoteGatewayError, RemoteGatewayStream, StreamHandler } from './RemoteGateway';
 import { jsonStr, jsonNum, asArray, asBool, asRecord } from '../protocol/Types';
+import { HostPluginBundle, readPluginInventory } from './PluginInventory';
+import { parsePluginSettings } from './PluginSettings';
 import { NetTrace } from '../util/NetTrace';
 
 /** 目录项（`host/listDirectory`）。 */
@@ -327,6 +329,27 @@ export class HarnessAlphaClient {
   }
 
   /** 列目录；兼容 entries/items 与 isDirectory/type 两种字段形状。 */
+  /** 主机插件清单（bundles + plugins + settings 合成）。 */
+  async pluginInventory(): Promise<HostPluginBundle[]> {
+    const bundles: Object = await this.callValue('pluginManager/listBundles', {});
+    const plugins: Object = await this.callValue('pluginManager/listPlugins', {});
+    const settings: Object = await this.callValue('settings/describe', {})
+      .catch((): Object => new Object());
+    return readPluginInventory(bundles, plugins, parsePluginSettings(settings));
+  }
+
+  /** 启停一个插件或插件包；返回宿主给出的一条说明。 */
+  async setHostPluginEnabled(target: string, enabled: boolean, bundle: boolean): Promise<string> {
+    const args: Record<string, Object> = bundle ? { 'name': target, 'enabled': enabled }
+      : { 'id': target, 'enabled': enabled };
+    const value: Record<string, Object> | undefined = asRecord(await this.callValue(bundle
+      ? 'pluginManager/setBundleEnabled' : 'pluginManager/setPluginEnabled', args));
+    if (value === undefined || typeof value['application'] !== 'string') {
+      throw new Error('INVALID_MESSAGE');
+    }
+    return value['application'] as string;
+  }
+
   async listDirectory(path: string): Promise<DirectoryEntry[]> {
     // 主机侧对应的是 directoryPicker/list，参数是裸 path（不是 {request:{path}}）
     const args: Record<string, Object> = { 'path': path };

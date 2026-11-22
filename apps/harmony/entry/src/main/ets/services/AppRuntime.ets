@@ -11,6 +11,7 @@ import { SecureTransport } from '../net/SecureTransport';
 import { RemoteClientCore, RemoteClientError } from '../net/RemoteClientCore';
 import { RemoteGateway, RemoteGatewayError, RemoteHostFeatures } from '../net/RemoteGateway';
 import { TerminalAttachment, TerminalDimensions, TerminalInfo, TerminalSession } from '../net/TerminalSession';
+import { HostPluginBundle } from '../net/PluginInventory';
 import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRemoteSession,
   DirectoryEntry, HarnessSchedule, HarnessScheduleDelivery, HarnessSessionEvent, HarnessWorkspace,
   HarnessWorkspaceSnapshot, HistoryPage, PromptImagePart, PromptFilePart } from '../net/HarnessClient';
@@ -751,6 +752,24 @@ export class AppRuntime {
     this.setBusy(false);
     this.notify();
     return undefined;
+  }
+
+  /** 主机插件清单（读一次，界面自己缓存）。 */
+  async loadHostPlugins(): Promise<HostPluginBundle[]> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    if (harness === undefined) {
+      throw new Error('尚未连接主机');
+    }
+    return await harness.pluginInventory();
+  }
+
+  /** 启停插件/插件包，返回宿主说明（可能需要重启 Harness 才生效）。 */
+  async setHostPluginEnabled(target: string, enabled: boolean, bundle: boolean): Promise<string> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    if (harness === undefined) {
+      throw new Error('尚未连接主机');
+    }
+    return await harness.setHostPluginEnabled(target, enabled, bundle);
   }
 
   /** 打开（或复用）一个会话终端，把输出喂给回调。 */

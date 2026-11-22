@@ -10,6 +10,7 @@ import { AppRuntime, ChatItem, ChatQuestion, DEFAULT_SERVER_URL, DEFAULT_ACCOUNT
   getAppRuntime, errorMessage, maskSecrets } from '../services/AppRuntime';
 import { RemoteHostDevice } from '../model/Types';
 import { DirectoryEntry, HarnessWorkspace } from '../net/HarnessClient';
+import { HostPluginBundle, HostPluginRow } from '../net/PluginInventory';
 import { HarnessRemoteSession, HarnessSchedule, HarnessScheduleDelivery } from '../net/HarnessClient';
 import { applyTint, darkPalette, lightPalette, Palette } from '../services/Theme';
 import { OAuthProvider, clientVersion as appVersion } from '../net/ServerApi';
@@ -354,6 +355,12 @@ struct Index {
   @State terminalBusy: boolean = false;
   @State terminalTitle: string = '';
   @State terminalInput: string = '';
+  /** 主机插件清单浮层。 */
+  @State pluginsOpen: boolean = false;
+  @State pluginsLoading: boolean = false;
+  @State pluginsError: string = '';
+  @State pluginsRev: number = 0;
+  private hostPlugins: HostPluginBundle[] = [];
   private windowChromeDark: boolean = false;
   private chromeApplied: boolean = false;
 
@@ -2594,6 +2601,9 @@ struct Index {
       if (this.tintPickerOpen) {
         this.TintPickerOverlay()
       }
+      if (this.pluginsOpen) {
+        this.PluginsOverlay()
+      }
       if (this.terminalOpen) {
         this.TerminalOverlay()
       }
@@ -3125,6 +3135,13 @@ struct Index {
                   this.settingsRev = this.settingsRev + 1;
                   this.runtime.setSecretMask(this.uiSecretMask);
                 })
+              this.SettingsRow(this.tr('插件管理'),
+                this.hostPlugins.length > 0
+                  ? ('' + this.hostPlugins.length + ' ' + this.tr('个插件包'))
+                  : this.tr('查看主机插件'),
+                false, () => {
+                  this.openPluginsOverlay();
+                })
               this.SettingsRow(this.tr('终端'),
                 this.terminalRunning ? this.tr('运行中') : this.tr('打开会话终端'),
                 false, () => {
@@ -3332,6 +3349,36 @@ struct Index {
       logWarn('home mascot pick failed: ' + errorMessage(error));
       promptAction.showToast({ message: this.tr('选图失败，换一张试试') });
     }
+  }
+
+  /** 打开插件管理：读一次宿主的插件清单。 */
+  private openPluginsOverlay(): void {
+    this.pluginsOpen = true;
+    this.pluginsLoading = true;
+    this.pluginsError = '';
+    this.runtime.loadHostPlugins().then((list: HostPluginBundle[]) => {
+      this.hostPlugins = list;
+      this.pluginsLoading = false;
+      this.pluginsRev = this.pluginsRev + 1;
+    }).catch((error: Error) => {
+      this.pluginsLoading = false;
+      this.pluginsError = errorMessage(error);
+      this.pluginsRev = this.pluginsRev + 1;
+    });
+  }
+
+  /** 启停一个插件包或单个插件。 */
+  private toggleHostPlugin(target: string, enabled: boolean, isBundle: boolean): void {
+    this.runtime.setHostPluginEnabled(target, enabled, isBundle).then((note: string) => {
+      promptAction.showToast({ message: note.length > 0 ? note : this.tr('已修改，重启 Harness 生效') });
+      this.openPluginsOverlay();
+    }).catch((error: Error) => {
+      promptAction.showToast({ message: errorMessage(error) });
+    });
+  }
+
+  private toastPluginReadOnly(): void {
+    promptAction.showToast({ message: this.tr('这个插件被宿主标记为只读') });
   }
 
   /** 打开会话终端：拉一个流，输出滚进缓冲区。 */
@@ -9005,6 +9052,121 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 插件管理：列出主机插件包与其中的插件，可启停（写操作交给宿主裁决）。 */
+  @Builder
+  PluginsOverlay() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Text(this.tr('插件管理'))
+          .fontSize(this.fs(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text)
+        Blank()
+        Text(this.tr('刷新'))
+          .fontSize(this.fs(12))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.openPluginsOverlay();
+          })
+        Text(this.tr('收起'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.pluginsOpen = false;
+          })
+      }
+      .width('100%')
+
+      if (this.pluginsLoading) {
+        Row({ space: 8 }) {
+          LoadingProgress().width(16).height(16).color('#22D3EE')
+          Text(this.tr('读取主机插件…')).fontSize(this.fs(12)).fontColor(this.pal().text3)
+        }
+      } else if (this.pluginsError.length > 0) {
+        Text(this.tr('无法读取主机插件：') + this.pluginsError)
+          .fontSize(this.fs(12))
+          .fontColor('#F85749')
+          .width('100%')
+      } else if (this.hostPlugins.length === 0) {
+        Text(this.tr('主机没有可管理的插件'))
+          .fontSize(this.fs(12))
+          .fontColor(this.pal().text3)
+      } else {
+        List({ space: 8 }) {
+          ForEach(this.hostPlugins, (bundle: HostPluginBundle) => {
+            ListItem() {
+              Column({ space: 6 }) {
+                Row({ space: 8 }) {
+                  Text(bundle.title.length > 0 ? bundle.title : bundle.name)
+                    .fontSize(this.fs(14))
+                    .fontColor(this.pal().text)
+                    .maxLines(1)
+                    .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    .layoutWeight(1)
+                  if (bundle.version.length > 0) {
+                    Text(bundle.version)
+                      .fontSize(this.fs(10))
+                      .fontColor(this.pal().text3)
+                  }
+                  Text(bundle.enabled ? this.tr('已启用') : this.tr('未启用'))
+                    .fontSize(this.fs(10))
+                    .fontColor(bundle.enabled ? '#34D399' : this.pal().text3)
+                    .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                    .backgroundColor(bundle.enabled ? 'rgba(52,211,153,0.14)' : this.pal().inputBg)
+                    .borderRadius(6)
+                    .onClick(() => {
+                      if (!bundle.writable) {
+                        this.toastPluginReadOnly();
+                        return;
+                      }
+                      this.toggleHostPlugin(bundle.name, !bundle.enabled, true);
+                    })
+                }
+                .width('100%')
+                ForEach(bundle.rows, (row: HostPluginRow) => {
+                  Row({ space: 8 }) {
+                    Text(row.title.length > 0 ? row.title : row.name)
+                      .fontSize(this.fs(12))
+                      .fontColor(this.pal().text2)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                      .layoutWeight(1)
+                    Text(row.enabled ? this.tr('已启用') : this.tr('未启用'))
+                      .fontSize(this.fs(10))
+                      .fontColor(row.enabled ? '#34D399' : this.pal().text3)
+                      .onClick(() => {
+                        if (!row.writable) {
+                          this.toastPluginReadOnly();
+                          return;
+                        }
+                        this.toggleHostPlugin(row.entryId, !row.enabled, false);
+                      })
+                  }
+                  .width('100%')
+                  .padding({ top: 2 })
+                }, (row: HostPluginRow) => 'row:' + row.entryId + ':' + row.enabled)
+              }
+              .width('100%')
+              .padding(10)
+              .backgroundColor(this.pal().card)
+              .borderRadius(10)
+              .border({ width: 1, color: this.pal().border })
+            }
+          }, (bundle: HostPluginBundle) => 'bundle:' + bundle.name + ':' + bundle.enabled + ':' + this.pluginsRev)
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .scrollBar(BarState.Off)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 14, right: 14, top: 14, bottom: 18 })
+    .backgroundColor(this.pal().bg)
   }
 
   /** 会话终端：输出 + 一行输入（不做完整 ANSI 渲染，够用即可）。 */

@@ -260,6 +260,17 @@ function buildEnglish(): Map<string, string> {
   map.set('合计', 'Total');
   map.set('验证码或恢复码', 'Verification or recovery code');
   map.set('重新输入密码', 'Enter password again');
+  map.set('插件管理', 'Plugins');
+  map.set('个插件包', 'bundles');
+  map.set('查看主机插件', 'View Host plugins');
+  map.set('刷新', 'Refresh');
+  map.set('读取主机插件…', 'Reading Host plugins…');
+  map.set('无法读取主机插件：', 'Cannot read Host plugins: ');
+  map.set('主机没有可管理的插件', 'Host has no manageable plugins');
+  map.set('已启用', 'Enabled');
+  map.set('未启用', 'Disabled');
+  map.set('这个插件被宿主标记为只读', 'This plugin is read-only on the Host');
+  map.set('已修改，重启 Harness 生效', 'Changed — restart Harness to apply');
   map.set('终端', 'Terminal');
   map.set('可输入', 'Writable');
   map.set('打开会话终端', 'Open session terminal');

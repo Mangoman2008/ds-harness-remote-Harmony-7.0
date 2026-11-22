@@ -11,6 +11,7 @@ import { AppRuntime, ChatItem, ChatQuestion, DEFAULT_SERVER_URL, DEFAULT_ACCOUNT
 import { RemoteHostDevice } from '../model/Types';
 import { DirectoryEntry, HarnessWorkspace } from '../net/HarnessClient';
 import { HostPluginBundle, HostPluginRow } from '../net/PluginInventory';
+import { PluginSettingField, PluginSettingsForm } from '../net/PluginSettings';
 import { BotCatalogRow } from '../net/BotCatalog';
 import { HarnessRemoteSession, HarnessSchedule, HarnessScheduleDelivery } from '../net/HarnessClient';
 import { applyTint, darkPalette, lightPalette, Palette } from '../services/Theme';
@@ -362,6 +363,14 @@ struct Index {
   @State pluginsError: string = '';
   @State pluginsRev: number = 0;
   private hostPlugins: HostPluginBundle[] = [];
+  /** 正在编辑的插件设置表单。 */
+  @State pluginFormOpen: boolean = false;
+  @State pluginFormTitle: string = '';
+  @State pluginFormFields: PluginSettingField[] = [];
+  @State pluginFormEditing: string = '';
+  @State pluginFormDraft: string = '';
+  private pluginFormNamespace: string = '';
+  private pluginFormRevision: number = 0;
   /** DS-Bot 目录（机器人 + 群组）。 */
   @State botsOpen: boolean = false;
   @State botsLoading: boolean = false;
@@ -2607,6 +2616,9 @@ struct Index {
       if (this.tintPickerOpen) {
         this.TintPickerOverlay()
       }
+      if (this.pluginFormOpen) {
+        this.PluginFormOverlay()
+      }
       if (this.botsOpen) {
         this.BotsOverlay()
       }
@@ -3461,6 +3473,38 @@ struct Index {
       return this.tr('未开通');
     }
     return this.tr('点此查询');
+  }
+
+  /** 打开某个插件的设置表单。 */
+  private openPluginForm(title: string, form: PluginSettingsForm | undefined): void {
+    if (form === undefined) {
+      return;
+    }
+    this.pluginFormTitle = title;
+    this.pluginFormFields = form.fields;
+    this.pluginFormNamespace = form.namespace;
+    this.pluginFormRevision = form.revision;
+    this.pluginFormEditing = '';
+    this.pluginFormDraft = '';
+    this.pluginFormOpen = true;
+  }
+
+  /** 保存一个字段：布尔直接切，其余用编辑框里的草稿编码。 */
+  private savePluginField(field: PluginSettingField, draft: string): void {
+    const value: Object | undefined = field.encode(draft);
+    if (value === undefined) {
+      promptAction.showToast({ message: this.tr('格式不对，检查一下再存') });
+      return;
+    }
+    this.runtime.savePluginSetting(this.pluginFormNamespace, this.pluginFormRevision, field.key, value)
+      .then(() => {
+        promptAction.showToast({ message: this.tr('已保存') });
+        this.pluginFormOpen = false;
+        this.openPluginsOverlay();
+      })
+      .catch((error: Error) => {
+        promptAction.showToast({ message: errorMessage(error) });
+      });
   }
 
   private toastPluginReadOnly(): void {
@@ -9140,6 +9184,101 @@ struct Index {
     .height('100%')
   }
 
+  /** 单个插件的设置：布尔点一下即存，其余用一行输入框编辑后保存。 */
+  @Builder
+  PluginFormOverlay() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Text(this.pluginFormTitle)
+          .fontSize(this.fs(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text)
+          .maxLines(1)
+          .textOverflow({ overflow: TextOverflow.Ellipsis })
+          .layoutWeight(1)
+        Text(this.tr('收起'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .onClick(() => {
+            this.pluginFormOpen = false;
+          })
+      }
+      .width('100%')
+
+      List({ space: 8 }) {
+        ForEach(this.pluginFormFields, (field: PluginSettingField) => {
+          ListItem() {
+            Column({ space: 6 }) {
+              Row({ space: 8 }) {
+                Text(field.key)
+                  .fontSize(this.fs(12))
+                  .fontColor(this.pal().text)
+                  .layoutWeight(1)
+                Text(field.value)
+                  .fontSize(this.fs(11))
+                  .fontColor(this.pal().text3)
+                  .maxLines(1)
+                  .constraintSize({ maxWidth: 180 })
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+              }
+              .width('100%')
+              .onClick(() => {
+                if (field.kind === 'boolean') {
+                  this.savePluginField(field, field.value === 'true' ? 'false' : 'true');
+                  return;
+                }
+                this.pluginFormEditing = field.key;
+                this.pluginFormDraft = field.value;
+              })
+              if (field.description.length > 0) {
+                Text(field.description)
+                  .fontSize(this.fs(10))
+                  .fontColor(this.pal().text3)
+                  .maxLines(2)
+              }
+              if (this.pluginFormEditing === field.key) {
+                Row({ space: 8 }) {
+                  TextInput({ text: this.pluginFormDraft, placeholder: this.tr('新值') })
+                    .layoutWeight(1)
+                    .height(36)
+                    .fontSize(this.fs(12))
+                    .backgroundColor(this.pal().inputBg)
+                    .fontColor(this.pal().text)
+                    .borderRadius(8)
+                    .padding({ left: 10, right: 10 })
+                    .onChange((value: string) => {
+                      this.pluginFormDraft = value;
+                    })
+                  Text(this.tr('保存'))
+                    .fontSize(this.fs(12))
+                    .fontColor('#22D3EE')
+                    .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+                    .onClick(() => {
+                      this.savePluginField(field, this.pluginFormDraft);
+                    })
+                }
+                .width('100%')
+              }
+            }
+            .width('100%')
+            .padding(10)
+            .backgroundColor(this.pal().card)
+            .borderRadius(10)
+            .border({ width: 1, color: this.pal().border })
+            .alignItems(HorizontalAlign.Start)
+          }
+        }, (field: PluginSettingField) => 'field:' + field.key + ':' + this.pluginFormEditing + ':' + field.value)
+      }
+      .layoutWeight(1)
+      .width('100%')
+      .scrollBar(BarState.Off)
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 14, right: 14, top: 14, bottom: 18 })
+    .backgroundColor(this.pal().bg)
+  }
+
   /** DS-Bot 目录：机器人/群组列表，只读。 */
   @Builder
   BotsOverlay() {
@@ -9316,6 +9455,15 @@ struct Index {
                       .maxLines(1)
                       .textOverflow({ overflow: TextOverflow.Ellipsis })
                       .layoutWeight(1)
+                    if (row.settings !== undefined && row.settings.fields.length > 0) {
+                      Text(this.tr('设置'))
+                        .fontSize(this.fs(10))
+                        .fontColor('#22D3EE')
+                        .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                        .onClick(() => {
+                          this.openPluginForm(row.title.length > 0 ? row.title : row.name, row.settings);
+                        })
+                    }
                     Text(row.enabled ? this.tr('已启用') : this.tr('未启用'))
                       .fontSize(this.fs(10))
                       .fontColor(row.enabled ? '#34D399' : this.pal().text3)

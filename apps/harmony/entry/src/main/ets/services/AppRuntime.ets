@@ -12,6 +12,7 @@ import { RemoteClientCore, RemoteClientError } from '../net/RemoteClientCore';
 import { RemoteGateway, RemoteGatewayError, RemoteHostFeatures } from '../net/RemoteGateway';
 import { TerminalAttachment, TerminalDimensions, TerminalInfo, TerminalSession } from '../net/TerminalSession';
 import { HostPluginBundle } from '../net/PluginInventory';
+import { PluginSettingOperation } from '../net/PluginSettings';
 import { BotCatalogRow, parseBotCatalog } from '../net/BotCatalog';
 import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRemoteSession,
   DirectoryEntry, HarnessSchedule, HarnessScheduleDelivery, HarnessSessionEvent, HarnessWorkspace,
@@ -779,6 +780,18 @@ export class AppRuntime {
       logWarn('membership unavailable');
     }
     this.notify();
+  }
+
+  /** 保存插件设置：传一条「设置/取消」操作，宿主按 revision 校验。 */
+  async savePluginSetting(namespace: string, revision: number, key: string, value: Object | undefined): Promise<void> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    if (harness === undefined) {
+      throw new Error('尚未连接主机');
+    }
+    const operation = new PluginSettingOperation(key, value);
+    const operations: Object[] = [];
+    operations.push(operation as Object);
+    await harness.saveHostPluginSettings(namespace, revision, operations);
   }
 
   /** 主机插件清单（读一次，界面自己缓存）。 */

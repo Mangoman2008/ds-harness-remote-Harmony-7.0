@@ -260,6 +260,11 @@ function buildEnglish(): Map<string, string> {
   map.set('合计', 'Total');
   map.set('验证码或恢复码', 'Verification or recovery code');
   map.set('重新输入密码', 'Enter password again');
+  map.set('设置', 'Settings');
+  map.set('新值', 'New value');
+  map.set('保存', 'Save');
+  map.set('已保存', 'Saved');
+  map.set('格式不对，检查一下再存', 'Invalid value, check the format');
   map.set('DS-Bot', 'DS-Bot');
   map.set('查看机器人/群组', 'View bots / rooms');
   map.set('读取 DS-Bot…', 'Reading DS-Bot…');

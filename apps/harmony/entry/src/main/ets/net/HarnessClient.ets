@@ -338,6 +338,16 @@ export class HarnessAlphaClient {
     return readPluginInventory(bundles, plugins, parsePluginSettings(settings));
   }
 
+  /** 保存某命名空间下的插件设置（按 revision 做冲突检测）。 */
+  async saveHostPluginSettings(namespace: string, revision: number, operations: Object[]): Promise<void> {
+    const args: Record<string, Object> = {
+      'ns': namespace,
+      'expectedRevision': revision,
+      'ops': operations
+    };
+    await this.callValue('settings/mutate', args);
+  }
+
   /** 启停一个插件或插件包；返回宿主给出的一条说明。 */
   async setHostPluginEnabled(target: string, enabled: boolean, bundle: boolean): Promise<string> {
     const args: Record<string, Object> = bundle ? { 'name': target, 'enabled': enabled }

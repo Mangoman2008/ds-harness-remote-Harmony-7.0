@@ -269,6 +269,13 @@ function buildEnglish(): Map<string, string> {
   map.set('个成员', 'members');
   map.set('个', '');
   map.set('机器人', 'Bot');
+  map.set('账号与服务器', 'Account & Server');
+  map.set('列表与布局', 'List & Layout');
+  map.set('桌宠与外观', 'Pet & Appearance');
+  map.set('远程与主机', 'Remote & Host');
+  map.set('通知与提醒', 'Notifications');
+  map.set('外观与语言', 'Appearance & Language');
+  map.set('高级', 'Advanced');
   map.set('会员', 'Membership');
   map.set('有效', 'Active');
   map.set('有效 · 到期 ', 'Active · renews ');

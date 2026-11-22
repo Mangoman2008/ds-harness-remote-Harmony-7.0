@@ -2977,6 +2977,7 @@ struct Index {
                 .fontColor(this.pal().text3)
                 .width('100%')
                 .padding({ left: 4 })
+              this.SettingsGroupTitle(this.tr('账号与服务器'))
               this.SettingsRow(this.tr('切换服务器'), this.currentServerSummary(), false, () => {
                 this.showSettings = false;
                 this.showServerSwitch = true;
@@ -2991,6 +2992,7 @@ struct Index {
                 .fontColor(this.pal().text3)
                 .width('100%')
                 .padding({ left: 4 })
+              this.SettingsGroupTitle(this.tr('列表与布局'))
               this.SettingsRow(this.tr('列表密度'), this.layoutDensityLabel(), false, () => {
                 this.openChoice('density');
               })
@@ -3020,6 +3022,7 @@ struct Index {
                 .fontColor(this.pal().text3)
                 .width('100%')
                 .padding({ left: 4 })
+              this.SettingsGroupTitle(this.tr('高级'))
               this.SettingsRow(this.tr('清空本地数据'), this.tr('草稿/提示词/收藏'), true, () => {
                 AlertDialog.show({
                   title: this.tr('清空本地数据'),
@@ -3040,6 +3043,7 @@ struct Index {
                   }
                 });
               })
+              this.SettingsGroupTitle(this.tr('桌宠与外观'))
               this.SettingsRow(this.tr('首页动态图'),
                 !this.uiHomeMascot
                   ? this.tr('关闭')
@@ -3144,6 +3148,7 @@ struct Index {
                   this.settingsRev = this.settingsRev + 1;
                   this.runtime.setSecretMask(this.uiSecretMask);
                 })
+              this.SettingsGroupTitle(this.tr('远程与主机'))
               this.SettingsRow(this.tr('DS-Bot'),
                 this.bots.length > 0 ? ('' + this.bots.length + ' ' + this.tr('个')) : this.tr('查看机器人/群组'),
                 false, () => {
@@ -3184,6 +3189,7 @@ struct Index {
                     promptAction.showToast({ message: this.tr('诊断信息已复制') });
                   }).catch(() => undefined);
                 })
+              this.SettingsGroupTitle(this.tr('通知与提醒'))
               this.SettingsRow(this.tr('完成通知'),
                 this.uiNotifications ? this.tr('开') : this.tr('关'), false, () => {
                   const next: boolean = !this.uiNotifications;
@@ -3200,6 +3206,7 @@ struct Index {
                   }
                   this.runtime.notify();
                 })
+              this.SettingsGroupTitle(this.tr('外观与语言'))
               this.SettingsRow(this.tr('外观'), this.themeLabel(this.themeMode), false, () => {
                 this.openChoice('theme');
               })
@@ -3283,6 +3290,24 @@ struct Index {
   }
 
   /** 设置里的一行：左边标题、右边当前值 + 箭头。 */
+  /** 设置面板里的分组标题：小字号 + 分隔线，避免一长条看不清层次。 */
+  @Builder
+  SettingsGroupTitle(title: string) {
+    Row({ space: 8 }) {
+      Text(title)
+        .fontSize(this.fs(11))
+        .fontWeight(FontWeight.Medium)
+        .fontColor(this.pal().text3)
+        .letterSpacing(1)
+      Column()
+        .layoutWeight(1)
+        .height(0.5)
+        .backgroundColor(this.pal().border)
+    }
+    .width('100%')
+    .padding({ left: 18, right: 18, top: 6, bottom: 2 })
+  }
+
   @Builder
   SettingsRow(title: string, value: string, danger: boolean, action: () => void) {
     Row({ space: 10 }) {

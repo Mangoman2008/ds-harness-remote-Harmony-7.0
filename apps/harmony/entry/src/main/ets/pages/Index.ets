@@ -3135,6 +3135,12 @@ struct Index {
                   this.settingsRev = this.settingsRev + 1;
                   this.runtime.setSecretMask(this.uiSecretMask);
                 })
+              this.SettingsRow(this.tr('会员'),
+                this.membershipLabel(),
+                false, () => {
+                  this.runtime.refreshMembership();
+                  promptAction.showToast({ message: this.tr('正在刷新会员状态…') });
+                })
               this.SettingsRow(this.tr('插件管理'),
                 this.hostPlugins.length > 0
                   ? ('' + this.hostPlugins.length + ' ' + this.tr('个插件包'))
@@ -3375,6 +3381,26 @@ struct Index {
     }).catch((error: Error) => {
       promptAction.showToast({ message: errorMessage(error) });
     });
+  }
+
+  /** 会员状态一句话：未开通 / 有效（到期日）/ 已过期 / 已撤销。 */
+  private membershipLabel(): string {
+    const status: string = this.runtime.membership.status;
+    const expiry: number = this.runtime.membership.expiresAt;
+    const date: string = expiry > 0 ? formatDateOnly(expiry) : '';
+    if (status === 'active') {
+      return date.length > 0 ? this.tr('有效 · 到期 ') + date : this.tr('有效');
+    }
+    if (status === 'expired') {
+      return this.tr('已过期') + (date.length > 0 ? ' · ' + date : '');
+    }
+    if (status === 'revoked') {
+      return this.tr('已撤销');
+    }
+    if (status === 'none') {
+      return this.tr('未开通');
+    }
+    return this.tr('点此查询');
   }
 
   private toastPluginReadOnly(): void {
@@ -10669,6 +10695,17 @@ function waitLabel(since: number, english: boolean): string {
 /** 等太久（10 分钟以上）就提醒一句主机可能已经超时。 */
 function waitLooksStale(since: number): boolean {
   return since > 0 && Date.now() - since > 10 * 60 * 1000;
+}
+
+/** 只到天的日期：会员到期日这类文案用。 */
+function formatDateOnly(timestamp: number): string {
+  if (timestamp <= 0) {
+    return '';
+  }
+  const date: Date = new Date(timestamp);
+  const month: string = date.getMonth() + 1 < 10 ? '0' + (date.getMonth() + 1) : '' + (date.getMonth() + 1);
+  const day: string = date.getDate() < 10 ? '0' + date.getDate() : '' + date.getDate();
+  return date.getFullYear() + '-' + month + '-' + day;
 }
 
 function formatClock(timestamp: number): string {

@@ -260,6 +260,14 @@ function buildEnglish(): Map<string, string> {
   map.set('合计', 'Total');
   map.set('验证码或恢复码', 'Verification or recovery code');
   map.set('重新输入密码', 'Enter password again');
+  map.set('会员', 'Membership');
+  map.set('有效', 'Active');
+  map.set('有效 · 到期 ', 'Active · renews ');
+  map.set('已过期', 'Expired');
+  map.set('已撤销', 'Revoked');
+  map.set('未开通', 'Not subscribed');
+  map.set('点此查询', 'Tap to check');
+  map.set('正在刷新会员状态…', 'Refreshing membership…');
   map.set('插件管理', 'Plugins');
   map.set('个插件包', 'bundles');
   map.set('查看主机插件', 'View Host plugins');

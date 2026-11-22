@@ -4,7 +4,7 @@ import { jsonStr, jsonNum, jsonBool, jsonArr, asArray, asRecord } from '../proto
 import { AccountLoginResult, TokenPair, RemoteHostDevice, AuthorizedPeerDevice, DeviceIdentity } from '../model/Types';
 
 /** Fallback when the bundle info cannot be read; must match AppScope/app.json5. */
-const CLIENT_VERSION_FALLBACK: string = '0.17.198-lan';
+const CLIENT_VERSION_FALLBACK: string = '0.17.199-lan';
 
 let clientVersionValue: string = CLIENT_VERSION_FALLBACK;
 
@@ -29,6 +29,12 @@ export async function initClientVersion(): Promise<void> {
 /** Current client version, resolved from the bundle at bootstrap. */
 export function clientVersion(): string {
   return clientVersionValue;
+}
+
+export class AccountMembership {
+  /** none | active | expired | revoked */
+  status: string = '';
+  expiresAt: number = 0;
 }
 
 export class RemoteApiError extends Error {
@@ -281,6 +287,24 @@ export class RemoteServerApi {
     poll.status = jsonStr(root, 'status', '');
     poll.token = jsonStr(root, 'token', '');
     return poll;
+  }
+
+  /** 当前设备的账号会员状态（自托管服务器可能返回 none）。 */
+  async deviceAccountMembership(): Promise<AccountMembership> {
+    const text: string = await this.requestText('/api/v1/devices/self/membership', 'GET', undefined,
+      this.requireToken());
+    const root: Record<string, Object> = JSON.parse(text) as Record<string, Object>;
+    const status: string = jsonStr(root, 'status', '');
+    const expiry: number = jsonNum(root, 'expiresAt', 0);
+    if (!(status === 'none' && root['expiresAt'] === null)
+      && (!(status === 'active' || status === 'expired' || status === 'revoked')
+        || !Number.isSafeInteger(expiry) || expiry <= 0 || expiry > 8.64e15)) {
+      throw new RemoteApiError('INVALID_MESSAGE', '服务器返回的会员信息不合法', 0);
+    }
+    const result: AccountMembership = new AccountMembership();
+    result.status = status;
+    result.expiresAt = expiry;
+    return result;
   }
 
   /** The account that owns a session token, used right after a QR login completes. */

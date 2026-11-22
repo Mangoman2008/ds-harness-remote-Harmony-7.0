@@ -4,7 +4,7 @@ import { util } from '@kit.ArkTS';
 import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { notificationManager } from '@kit.NotificationKit';
 import { SecureStore, StoredServerConfig, SavedProfile } from './SecureStore';
-import { RemoteServerApi, RemoteApiError, normalizeServerUrl, websocketUrl, QrLoginSession, QrLoginPoll,
+import { RemoteServerApi, RemoteApiError, AccountMembership, normalizeServerUrl, websocketUrl, QrLoginSession, QrLoginPoll,
   OAuthProvider, HostPresence, initClientVersion, clientVersion } from '../net/ServerApi';
 import { CloseVerdict, RelayConnectionInfo, RelayTransport, RelayTransportOptions } from '../net/RelayTransport';
 import { SecureTransport } from '../net/SecureTransport';
@@ -752,6 +752,20 @@ export class AppRuntime {
     this.setBusy(false);
     this.notify();
     return undefined;
+  }
+
+  /** 会员状态：设置页显示，不用登录态以外的信息。 */
+  membership: AccountMembership = new AccountMembership();
+
+  async refreshMembership(): Promise<void> {
+    try {
+      const api: RemoteServerApi = await this.ensureApi();
+      this.membership = await api.deviceAccountMembership();
+    } catch (error) {
+      // 自托管/旧服务器可能没有这个接口：保持当前值，别把设置页搞成红字
+      logWarn('membership unavailable');
+    }
+    this.notify();
   }
 
   /** 主机插件清单（读一次，界面自己缓存）。 */

@@ -7,6 +7,7 @@ import { logInfo, logWarn, logError } from '../util/Log';
 import { RtcBridge } from '../services/RtcBridge';
 
 export class RelayTransportOptions {
+
   deviceId: string = '';
   accessToken: string = '';
   targetDeviceId: string = '';
@@ -242,6 +243,14 @@ export class RelayConnectionInfo {
 }
 
 export class RelayTransport {
+  /** HarmonyOS NetStack 生成的 Origin 不带端口；单独补一个完整 origin 头给自建服务器校验。 */
+  private nativeOriginHeader(url: string): Record<string, string> {
+    const origin: string = url.replace(/^ws(s?):\/\/([^/]+).*$/, 'http$1://$2').toLowerCase();
+    const header: Record<string, string> = { 'X-DSH-Native-Origin': origin };
+    return header;
+  }
+
+
   private url: string;
   private options: RelayTransportOptions;
   public onMessage: ((data: Uint8Array) => void) | undefined = undefined;
@@ -286,6 +295,9 @@ export class RelayTransport {
   private rtcPathValue: string = '';
   /** connect.accepted 里的中继端点/票据：直连失败回落时要用，也可能压根没给。 */
   private relayEndpointValue: string = '';
+  /** connect.accepted 里的中继节点 id，以及实际用上的中继 host（仅诊断展示）。 */
+  private relayNodeIdValue: string = '';
+  private activeRelayHost: string = '';
   private relayTicketValue: string = '';
   private relayEpochValue: number = -1;
 
@@ -333,7 +345,7 @@ export class RelayTransport {
       ws.on('error', (err: Error) => {
         this.fail(new Error(`RelayTransport failed to connect to ${this.url}`));
       });
-      ws.connect(this.url, (err: Error, value: boolean) => {
+      ws.connect(this.url, { header: this.nativeOriginHeader(this.url) }, (err: Error, value: boolean) => {
         if (err) {
           this.fail(new Error(`RelayTransport failed to connect to ${this.url}`));
         }
@@ -403,6 +415,24 @@ export class RelayTransport {
   }
 
   /** 本次连接没走直连的原因（空串 = 直连成功或未判定）。 */
+  /** 是否真的建立了独立中继数据面（而不是走控制通道转发）。 */
+  hasActiveRelayNode(): boolean {
+    return this.dataMode === 'relay' && this.dataReady && this.dataSocket !== undefined;
+  }
+
+  relayNodeHost(): string {
+    return this.hasActiveRelayNode() ? this.activeRelayHost : '';
+  }
+
+  relayNodeId(): string {
+    return this.hasActiveRelayNode() ? this.relayNodeIdValue : '';
+  }
+
+  usesControlRelay(): boolean {
+    return this.dataMode === 'relay'
+      && (this.relayEndpointValue.length === 0 || this.relayTicketValue.length === 0);
+  }
+
   lanSkipReason(): string {
     return this.lanSkipReasonValue;
   }
@@ -615,6 +645,7 @@ export class RelayTransport {
     const relayEpoch = jsonNum(frame.payload, 'relayEpoch', -1);
     logInfo('connect.accepted');
     this.relayEndpointValue = relayEndpoint;
+    this.relayNodeIdValue = jsonStr(frame.payload, 'relayNodeId', '');
     this.relayTicketValue = relayTicket;
     this.relayEpochValue = relayEpoch;
     if (relayEndpoint.length > 0 && relayTicket.length > 0 && this.relayCandidates.length === 0) {
@@ -1022,6 +1053,9 @@ export class RelayTransport {
             this.dataAttachResolve = undefined;
             this.dataAttachReject = undefined;
             this.dataReady = true;
+            // 诊断只暴露 authority，不带凭据、路径与查询串
+            const authority: RegExpMatchArray | null = relayEndpoint.match(/^wss?:\/\/(?:[^/?#]*@)?([^@/?#]+)/i);
+            this.activeRelayHost = authority === null ? '' : authority[1];
             lastGoodRelayEndpoint = relayEndpoint;
             logInfo('relay.ready epoch=' + relayEpoch + ' conn=' + this.connectionId
               + ' host=' + hostOfRelay(relayEndpoint));
@@ -1049,7 +1083,7 @@ export class RelayTransport {
           this.fail(new Error('Relay data socket closed'));
         }
       });
-      ws.connect(relayEndpoint, (err: Error, value: boolean) => {
+      ws.connect(relayEndpoint, { header: this.nativeOriginHeader(relayEndpoint) }, (err: Error, value: boolean) => {
         if (err) {
           clearTimeout(timer);
           const detail: string = err instanceof Error ? err.message : 'unknown';

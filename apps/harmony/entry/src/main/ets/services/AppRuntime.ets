@@ -4666,6 +4666,17 @@ export class AppRuntime {
       rows.push('直连：' + (this.transportLabel === 'lan' || this.transportLabel === 'p2p'
         ? '已直连' : (skip.length > 0 ? skip : '未尝试')));
     }
+    if (relay !== undefined && this.transportLabel === 'relay') {
+      if (relay.hasActiveRelayNode()) {
+        const host: string = relay.relayNodeHost();
+        const nodeId: string = relay.relayNodeId();
+        rows.push('中继：独立中继'
+          + (host.length > 0 ? ' · ' + host : '')
+          + (nodeId.length > 0 ? ' · ID ' + nodeId.slice(0, 8) : ''));
+      } else if (relay.usesControlRelay()) {
+        rows.push('中继：控制通道转发');
+      }
+    }
     rows.push('链路：' + silence);
     const heartbeat: string = relay !== undefined && relay.heartbeatIntervalMs() > 0
       ? Math.round(relay.heartbeatIntervalMs() / 1000) + ' 秒（服务端心跳）'

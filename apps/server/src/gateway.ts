@@ -121,6 +121,8 @@ export class Gateway {
   readonly logger: Logger
 
   constructor(server: Server, private store: Store, origin: string, options: GatewayOptions = {}) {
+    const publicUrl = new URL(origin)
+    const portlessOrigin = publicUrl.port === '' ? undefined : `${publicUrl.protocol}//${publicUrl.hostname}`
     // One normalization path for CLI and programmatic callers: NaN, Infinity,
     // negatives and out-of-range values degrade to documented defaults instead
     // of becoming 1ms timers.
@@ -139,7 +141,11 @@ export class Gateway {
       // The route still requires an exact match: a query string is rejected
       // (exactly as before) but only its parsed pathname is ever logged.
       const pathRejected = req.url !== '/ws/v1/connect'
-      const originRejected = Boolean(req.headers.origin) && req.headers.origin !== origin
+      const requestOrigin = req.headers.origin
+      // HarmonyOS NetStack 生成的 Origin 不带端口；客户端会用 X-DSH-Native-Origin 补全。
+      const harmonyOrigin = portlessOrigin !== undefined && requestOrigin === portlessOrigin
+        && req.headers['x-dsh-native-origin'] === origin
+      const originRejected = Boolean(requestOrigin) && requestOrigin !== origin && !harmonyOrigin
       if (pathRejected || originRejected || this.wss.clients.size >= 256) {
         this.logger.warn('ws_upgrade_rejected', {
           // Parsed pathname only: the raw URL may carry credentials in its query.

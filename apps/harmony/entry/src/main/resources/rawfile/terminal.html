@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="./terminal/xterm.css" />
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; background: #0b1220; overflow: hidden; }
+    #host { position: absolute; inset: 0; padding: 6px; }
+    /* 手机上没有物理键盘，输入靠宿主页的输入框；这里只负责显示与选择 */
+    .xterm .xterm-viewport { background: transparent !important; }
+  </style>
+</head>
+<body>
+  <div id="host"></div>
+  <script src="./terminal/xterm.js"></script>
+  <script>
+    (function () {
+      var bridge = window.dshTermBridge;
+      var term = new Terminal({
+        cols: 100,
+        rows: 30,
+        fontSize: 12,
+        fontFamily: 'monospace',
+        cursorBlink: false,
+        convertEol: false,
+        scrollback: 2000,
+        theme: {
+          background: '#0b1220',
+          foreground: '#e7ecf7',
+          cursor: '#22d3ee'
+        }
+      });
+      term.open(document.getElementById('host'));
+      term.onData(function (data) {
+        if (bridge && bridge.onTerminalData) {
+          bridge.onTerminalData(data);
+        }
+      });
+
+      // 宿主页调用：写入一段输出 / 清屏 / 聚焦
+      window.__dshTerm = {
+        write: function (text) { term.write(text); },
+        reset: function () { term.reset(); },
+        focus: function () { term.focus(); }
+      };
+
+      if (bridge && bridge.onTerminalReady) {
+        bridge.onTerminalReady();
+      }
+    })();
+  </script>
+</body>
+</html>

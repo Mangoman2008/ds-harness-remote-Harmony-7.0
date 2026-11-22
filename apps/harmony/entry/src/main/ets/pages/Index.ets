@@ -1,4 +1,5 @@
 import { KeyboardAvoidMode, UIContext, display, window, promptAction } from '@kit.ArkUI';
+import { webview } from '@kit.ArkWeb';
 import { KeyCode } from '@ohos.multimodalInput.keyCode';
 import { pdfService, pdfViewManager, PdfView } from '@kit.PDFKit';
 import { common, Want } from '@kit.AbilityKit';
@@ -357,6 +358,11 @@ struct Index {
   @State terminalBusy: boolean = false;
   @State terminalTitle: string = '';
   @State terminalInput: string = '';
+  /** xterm 视图是否就绪；就绪前的输出先攒着。 */
+  private terminalReady: boolean = false;
+  private terminalPending: string[] = [];
+  private terminalController: webview.WebviewController = new webview.WebviewController();
+  private terminalBridge: TerminalBridge = new TerminalBridge();
   /** 主机插件清单浮层。 */
   @State pluginsOpen: boolean = false;
   @State pluginsLoading: boolean = false;
@@ -3520,10 +3526,17 @@ struct Index {
     this.terminalOpen = true;
     this.terminalText = '';
     this.terminalTitle = '';
+    this.terminalReady = false;
+    this.terminalPending = [];
+    this.terminalBridge.onData = (data: string) => {
+      this.runtime.writeTerminal(data);
+    };
+    this.terminalBridge.onReady = () => {
+      this.terminalReady = true;
+      this.flushTerminalPending();
+    };
     this.runtime.openTerminal((data: string) => {
-      const next: string = this.terminalText + data;
-      // 只留最后 120k 字符，长了就截断，别把内存吃满
-      this.terminalText = next.length > 120000 ? next.substring(next.length - 120000) : next;
+      this.writeTerminalView(data);
     }, (writable: boolean, running: boolean) => {
       this.terminalWritable = writable;
       this.terminalRunning = running;
@@ -3539,6 +3552,36 @@ struct Index {
       this.terminalRunning = false;
       this.terminalText = this.tr('无法打开终端') + '：' + errorMessage(error);
     });
+  }
+
+  /** 把一段输出送进 xterm；视图没就绪先缓冲（最多留 2 万字符）。 */
+  private writeTerminalView(data: string): void {
+    if (!this.terminalReady) {
+      this.terminalPending.push(data);
+      let total: number = 0;
+      for (const chunk of this.terminalPending) {
+        total += chunk.length;
+      }
+      while (total > 20000 && this.terminalPending.length > 0) {
+        total -= this.terminalPending[0].length;
+        this.terminalPending.shift();
+      }
+      return;
+    }
+    try {
+      const literal: string = JSON.stringify(data);
+      this.terminalController.runJavaScript('window.__dshTerm && window.__dshTerm.write(' + literal + ');');
+    } catch (error) {
+      logWarn('terminal write failed');
+    }
+  }
+
+  private flushTerminalPending(): void {
+    const chunks: string[] = this.terminalPending;
+    this.terminalPending = [];
+    for (const chunk of chunks) {
+      this.writeTerminalView(chunk);
+    }
   }
 
   private closeTerminalOverlay(): void {
@@ -9498,7 +9541,7 @@ struct Index {
     .backgroundColor(this.pal().bg)
   }
 
-  /** 会话终端：输出 + 一行输入（不做完整 ANSI 渲染，够用即可）。 */
+  /** 会话终端：xterm.js 渲染（ANSI 颜色/清屏都支持），输入走宿主页的输入框。 */
   @Builder
   TerminalOverlay() {
     Column({ space: 10 }) {
@@ -9528,21 +9571,24 @@ struct Index {
       }
       .width('100%')
 
-      Scroll() {
-        Text(this.terminalText.length > 0 ? this.terminalText : this.tr('正在连接终端…'))
-          .fontSize(this.fs(11))
-          .fontFamily('monospace')
-          .fontColor(this.terminalText.length > 0 ? this.pal().text2 : this.pal().text3)
-          .width('100%')
-          .textAlign(TextAlign.Start)
-          .copyOption(CopyOptions.LocalDevice)
-      }
-      .layoutWeight(1)
-      .width('100%')
-      .align(Alignment.TopStart)
-      .backgroundColor(this.pal().inputBg)
-      .borderRadius(10)
-      .padding(8)
+      Web({ src: $rawfile('terminal.html'), controller: this.terminalController })
+        .javaScriptAccess(true)
+        .domStorageAccess(false)
+        .fileAccess(false)
+        .javaScriptProxy({
+          object: this.terminalBridge,
+          name: 'dshTermBridge',
+          methodList: ['onTerminalData', 'onTerminalReady'],
+          controller: this.terminalController
+        })
+        .onPageEnd(() => {
+          this.terminalReady = true;
+          this.flushTerminalPending();
+        })
+        .layoutWeight(1)
+        .width('100%')
+        .borderRadius(10)
+        .backgroundColor('#0b1220')
 
       Row({ space: 8 }) {
         TextInput({ text: this.terminalInput, placeholder: this.tr('输入命令后回车') })
@@ -9579,8 +9625,6 @@ struct Index {
     .padding({ left: 14, right: 14, top: 14, bottom: 18 })
     .backgroundColor(this.pal().bg)
   }
-
-  /** 连接诊断：现场排障不用连电脑抓 hilog。 */
   @Builder
   DiagnosticsOverlay() {
     Stack({ alignContent: Alignment.Bottom }) {
@@ -11019,6 +11063,19 @@ function formatClock(timestamp: number): string {
   const hh: string = date.getHours() < 10 ? '0' + date.getHours() : '' + date.getHours();
   const mm: string = date.getMinutes() < 10 ? '0' + date.getMinutes() : '' + date.getMinutes();
   return hh + ':' + mm;
+}
+
+class TerminalBridge {
+  onData: (data: string) => void = () => {};
+  onReady: () => void = () => {};
+
+  onTerminalData(data: string): void {
+    this.onData(data);
+  }
+
+  onTerminalReady(): void {
+    this.onReady();
+  }
 }
 
 class MdLine {

@@ -2900,6 +2900,31 @@ export class AppRuntime {
     }
   }
 
+  /** 把一条「排队中」的消息插队进当前回合（updateQueue action=steer）。 */
+  async promoteQueuedSend(item: ChatItem): Promise<string> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    const sessionId: string = this.currentSessionId;
+    if (harness === undefined || sessionId.length === 0) {
+      throw new Error('还没连上会话');
+    }
+    const requestId: string = item.requestRpcId;
+    const rows: Record<string, Object>[] = await harness.sessionQueuedItems(sessionId);
+    let itemId: string = '';
+    for (const row of rows) {
+      const rpcId: string = jsonStr(row, 'rpcId', '');
+      if (requestId.length > 0 && rpcId === requestId) {
+        itemId = jsonStr(row, 'id', '');
+        break;
+      }
+    }
+    if (itemId.length === 0) {
+      throw new Error('这条消息已经不在队列里了（可能已被处理）');
+    }
+    await harness.updateQueue(sessionId, itemId, 'steer');
+    this.setSendState(item.id, 'turn-steer');
+    return '已插队到当前回合';
+  }
+
   /** 改一条消息的发送状态（会重建数组，保证 ForEach 认得出变化）。 */
   private setSendState(itemId: string, state: string): void {
     const next: ChatItem[] = this.messages.slice();

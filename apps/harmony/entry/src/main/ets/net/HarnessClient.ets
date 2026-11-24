@@ -329,6 +329,31 @@ export class HarnessAlphaClient {
   }
 
   /** 列目录；兼容 entries/items 与 isDirectory/type 两种字段形状。 */
+  /** 读一次会话状态：里面带着队列（id / placement / rpcId）。 */
+  async sessionQueuedItems(sessionId: string): Promise<Record<string, Object>[]> {
+    const value: Record<string, Object> | undefined = asRecord(await this.callValue('session/state',
+      { 'sessionId': sessionId }));
+    const queue: Object[] | undefined = value === undefined ? undefined : asArray(value['queue']);
+    const rows: Record<string, Object>[] = [];
+    for (const item of queue ?? []) {
+      const record: Record<string, Object> | undefined = asRecord(item);
+      if (record !== undefined) {
+        rows.push(record);
+      }
+    }
+    return rows;
+  }
+
+  /** 改组队项：edit / remove / steer（steer = 插队进当前回合）。 */
+  async updateQueue(sessionId: string, itemId: string, kind: string): Promise<void> {
+    const action: Record<string, Object> = { 'kind': kind };
+    await this.callValue('session/updateQueue', {
+      'sessionId': sessionId,
+      'itemId': itemId,
+      'action': action
+    });
+  }
+
   /** 主机插件清单（bundles + plugins + settings 合成）。 */
   async pluginInventory(): Promise<HostPluginBundle[]> {
     const bundles: Object = await this.callValue('pluginManager/listBundles', {});

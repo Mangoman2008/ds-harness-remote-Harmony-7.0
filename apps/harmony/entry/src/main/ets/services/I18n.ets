@@ -323,6 +323,8 @@ function buildEnglish(): Map<string, string> {
   map.set('排队中 · 等当前回合结束', 'Queued · waits for the running turn');
   map.set('插队', 'Jump queue');
   map.set('撤回', 'Withdraw');
+  map.set('排队中', 'Queued');
+  map.set('已插队', 'Steered');
   map.set('已撤回', 'Withdrawn');
   map.set('已插入当前回合', 'Steered into the running turn');
   map.set('自检', 'Self-check');

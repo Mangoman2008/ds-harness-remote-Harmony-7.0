@@ -2873,6 +2873,8 @@ export class AppRuntime {
         // 主机正在跑上一轮：这条其实排在队里（或插话），得让用户看见状态，
         // 否则会以为「发出去了却没反应」。
         this.setSendState(item.id, this.steerMode ? 'turn-steer' : 'turn-queued');
+        LinkLog.write('queue', '回合中发送 mode=' + (this.steerMode ? 'steer' : 'queue')
+          + ' req=' + requestId.slice(0, 8) + ' chars=' + trimmed.length);
       }
     } catch (error) {
       const explained: ErrorExplanation = explainError(errorMessage(error));
@@ -2928,6 +2930,7 @@ export class AppRuntime {
       throw new Error('这条消息已经不在队列里了（可能已被处理）');
     }
     await harness.updateQueue(sessionId, itemId, 'remove');
+    LinkLog.write('queue', '撤回排队项 item=' + itemId.slice(0, 8) + ' req=' + item.requestRpcId.slice(0, 8));
     this.setSendState(item.id, 'withdrawn');
     return '已撤回排队中的消息';
   }
@@ -2944,6 +2947,7 @@ export class AppRuntime {
       throw new Error('这条消息已经不在队列里了（可能已被处理）');
     }
     await harness.updateQueue(sessionId, itemId, 'steer');
+    LinkLog.write('queue', '插队 item=' + itemId.slice(0, 8) + ' req=' + item.requestRpcId.slice(0, 8));
     this.setSendState(item.id, 'turn-steer');
     return '已插队到当前回合';
   }

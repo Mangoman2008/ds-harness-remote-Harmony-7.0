@@ -7721,18 +7721,17 @@ struct Index {
               .fontSize(this.fs(10))
               .fontColor('rgba(255,255,255,0.78)')
           }
+          // 回合进行中的状态：一行小字 + 两个文字动作，和气泡里其他小标签同样式
           if (item.sendState === 'turn-queued') {
             Row({ space: 6 }) {
-              Text(this.tr('排队中 · 等当前回合结束'))
+              Text(this.tr('排队中'))
                 .fontSize(this.fs(10))
-                .fontColor('rgba(255,255,255,0.86)')
-              // 排队后还能改主意：点这里把这条插队进当前回合
+                .fontColor('rgba(255,255,255,0.72)')
               Text(this.tr('插队'))
                 .fontSize(this.fs(10))
-                .fontColor('#22D3EE')
-                .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-                .backgroundColor('rgba(34,211,238,0.16)')
-                .borderRadius(6)
+                .fontColor('#FFFFFF')
+                .fontWeight(FontWeight.Medium)
+                .padding({ left: 4, right: 4 })
                 .onClick(() => {
                   this.runtime.promoteQueuedSend(item).then((note: string) => {
                     promptAction.showToast({ message: note });
@@ -7740,12 +7739,14 @@ struct Index {
                     promptAction.showToast({ message: errorMessage(error) });
                   });
                 })
+              Text('·')
+                .fontSize(this.fs(10))
+                .fontColor('rgba(255,255,255,0.45)')
               Text(this.tr('撤回'))
                 .fontSize(this.fs(10))
-                .fontColor('rgba(255,255,255,0.86)')
-                .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-                .backgroundColor('rgba(255,255,255,0.16)')
-                .borderRadius(6)
+                .fontColor('#FFFFFF')
+                .fontWeight(FontWeight.Medium)
+                .padding({ left: 4, right: 4 })
                 .onClick(() => {
                   this.runtime.withdrawQueuedSend(item).then((note: string) => {
                     promptAction.showToast({ message: note });
@@ -7754,38 +7755,25 @@ struct Index {
                   });
                 })
             }
-            .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-            .backgroundColor('rgba(255,255,255,0.16)')
-            .borderRadius(6)
+            .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+            .backgroundColor('rgba(255,255,255,0.14)')
+            .borderRadius(7)
+          }
+          if (item.sendState === 'turn-steer') {
+            Text(this.tr('已插队'))
+              .fontSize(this.fs(10))
+              .fontColor('rgba(255,255,255,0.72)')
+              .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+              .backgroundColor('rgba(255,255,255,0.14)')
+              .borderRadius(7)
           }
           if (item.sendState === 'withdrawn') {
             Text(this.tr('已撤回'))
               .fontSize(this.fs(10))
-              .fontColor('rgba(255,255,255,0.70)')
-              .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-              .backgroundColor('rgba(0,0,0,0.22)')
-              .borderRadius(6)
-          }
-          if (item.sendState === 'turn-steer') {
-            Text(this.tr('已插入当前回合'))
-              .fontSize(this.fs(10))
-              .fontColor('rgba(255,255,255,0.86)')
-              .padding({ left: 6, right: 6, top: 1, bottom: 1 })
-              .backgroundColor('rgba(255,255,255,0.16)')
-              .borderRadius(6)
-          }
-          if (item.sendState === 'failed') {
-            Row({ space: 8 }) {
-              Text(this.tr('发送失败'))
-                .fontSize(this.fs(10))
-                .fontColor('#F85749')
-              Text(this.tr('重试'))
-                .fontSize(this.fs(10))
-                .fontColor('#22D3EE')
-                .onClick(() => {
-                  this.runtime.retrySend(item);
-                })
-            }
+              .fontColor('rgba(255,255,255,0.55)')
+              .padding({ left: 8, right: 8, top: 2, bottom: 2 })
+              .backgroundColor('rgba(0,0,0,0.18)')
+              .borderRadius(7)
           }
           if (item.timestamp > 0) {
             Text(formatClock(item.timestamp))

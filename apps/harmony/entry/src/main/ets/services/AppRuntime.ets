@@ -2909,13 +2909,7 @@ export class AppRuntime {
     if (requestId.length === 0) {
       return '';
     }
-    const rows: Record<string, Object>[] = await harness.sessionQueuedItems(sessionId);
-    for (const row of rows) {
-      if (jsonStr(row, 'rpcId', '') === requestId) {
-        return jsonStr(row, 'id', '');
-      }
-    }
-    return '';
+    return await harness.findQueuedItemId(sessionId, requestId);
   }
 
   /** 撤回一条还在排队的消息（updateQueue action=remove）。 */

@@ -329,19 +329,36 @@ export class HarnessAlphaClient {
   }
 
   /** 列目录；兼容 entries/items 与 isDirectory/type 两种字段形状。 */
-  /** 读一次会话状态：里面带着队列（id / placement / rpcId）。 */
-  async sessionQueuedItems(sessionId: string): Promise<Record<string, Object>[]> {
-    const value: Record<string, Object> | undefined = asRecord(await this.callValue('session/state',
-      { 'sessionId': sessionId }));
-    const queue: Object[] | undefined = value === undefined ? undefined : asArray(value['queue']);
-    const rows: Record<string, Object>[] = [];
-    for (const item of queue ?? []) {
-      const record: Record<string, Object> | undefined = asRecord(item);
-      if (record !== undefined) {
-        rows.push(record);
+  /**
+   * 找排队项的 MessageId：`session/state` 不在 Remote 插件的白名单里（会回
+   * 「endpoint is not allowed」），改用允许的 `session/projections` 读 inbox 投影，
+   * 里面 next-turn / next-step 的每条消息都带 id 与 source.rpcId。
+   */
+  async findQueuedItemId(sessionId: string, requestId: string): Promise<string> {
+    if (requestId.length === 0) {
+      return '';
+    }
+    const raw: Record<string, Object> = await this.sessionProjections(sessionId);
+    const values: Record<string, Object> | undefined = asRecord(raw['values']) ?? raw;
+    const inbox: Record<string, Object> | undefined = asRecord(values['inbox']);
+    if (inbox === undefined) {
+      return '';
+    }
+    for (const key of ['next-turn', 'next-step']) {
+      const list: Object[] | undefined = asArray(inbox[key]);
+      for (const item of list ?? []) {
+        const message: Record<string, Object> | undefined = asRecord(item);
+        if (message === undefined) {
+          continue;
+        }
+        const source: Record<string, Object> | undefined = asRecord(message['source']);
+        const rpcId: string = source === undefined ? '' : jsonStr(source, 'rpcId', '');
+        if (rpcId === requestId) {
+          return jsonStr(message, 'id', '');
+        }
       }
     }
-    return rows;
+    return '';
   }
 
   /** 改组队项：edit / remove / steer（steer = 插队进当前回合）。 */

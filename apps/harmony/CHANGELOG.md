@@ -60,5 +60,7 @@
 - 排队后悔了可以「插队」：排队中的气泡上点「插队」，就地把这条改成立即插入当前回合（走 `session/updateQueue` 的 steer）。
 - 排队中的消息也可以「撤回」（`session/updateQueue` 的 remove），撤回后气泡标「已撤回」，不会在下一回合被发出去。
 - 排队状态收成一行：`排队中 插队 · 撤回`（同一枚淡色胶囊），已插队/已撤回各自只显示一条状态字，不再堆多个标签。
+- 修插队/撤回在真机上报「endpoint is not allowed」：Host 插件的白名单里没有 `session/state`，
+  改为从允许的 `session/projections` 的 inbox 投影里按 `source.rpcId` 找队列项 id。
 
 贡献者：[Mangoman2008](https://github.com/Mangoman2008)。

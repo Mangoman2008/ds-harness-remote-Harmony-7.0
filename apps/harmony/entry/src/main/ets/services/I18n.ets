@@ -322,6 +322,8 @@ function buildEnglish(): Map<string, string> {
   map.set('断线排队中 · 重连后自动发送', 'Queued offline · sends after reconnect');
   map.set('排队中 · 等当前回合结束', 'Queued · waits for the running turn');
   map.set('插队', 'Jump queue');
+  map.set('撤回', 'Withdraw');
+  map.set('已撤回', 'Withdrawn');
   map.set('已插入当前回合', 'Steered into the running turn');
   map.set('自检', 'Self-check');
   map.set('自检结果', 'Self-check result');

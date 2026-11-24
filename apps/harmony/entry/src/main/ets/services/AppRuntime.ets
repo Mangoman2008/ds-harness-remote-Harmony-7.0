@@ -134,6 +134,7 @@ export class ChatItem {
    *   'queued'      断线排队中（重连后自动补发）
    *   'turn-queued' 主机正在跑这一轮，消息已入队等下一轮
    *   'turn-steer'  已插入当前回合（steer 模式）
+   *   'withdrawn'   排队中被撤回
    */
   sendState: string = '';
   /** 用户消息里带的图片（标准 base64）；本地刚发的直接用，历史的按 attachmentId 拉。 */
@@ -2900,6 +2901,37 @@ export class AppRuntime {
     }
   }
 
+  /** 在队列里按 requestId 找 itemId；找不到返回空串。 */
+  private async queuedItemId(harness: HarnessAlphaClient, sessionId: string,
+    requestId: string): Promise<string> {
+    if (requestId.length === 0) {
+      return '';
+    }
+    const rows: Record<string, Object>[] = await harness.sessionQueuedItems(sessionId);
+    for (const row of rows) {
+      if (jsonStr(row, 'rpcId', '') === requestId) {
+        return jsonStr(row, 'id', '');
+      }
+    }
+    return '';
+  }
+
+  /** 撤回一条还在排队的消息（updateQueue action=remove）。 */
+  async withdrawQueuedSend(item: ChatItem): Promise<string> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    const sessionId: string = this.currentSessionId;
+    if (harness === undefined || sessionId.length === 0) {
+      throw new Error('还没连上会话');
+    }
+    const itemId: string = await this.queuedItemId(harness, sessionId, item.requestRpcId);
+    if (itemId.length === 0) {
+      throw new Error('这条消息已经不在队列里了（可能已被处理）');
+    }
+    await harness.updateQueue(sessionId, itemId, 'remove');
+    this.setSendState(item.id, 'withdrawn');
+    return '已撤回排队中的消息';
+  }
+
   /** 把一条「排队中」的消息插队进当前回合（updateQueue action=steer）。 */
   async promoteQueuedSend(item: ChatItem): Promise<string> {
     const harness: HarnessAlphaClient | undefined = this.harness;
@@ -2907,16 +2939,7 @@ export class AppRuntime {
     if (harness === undefined || sessionId.length === 0) {
       throw new Error('还没连上会话');
     }
-    const requestId: string = item.requestRpcId;
-    const rows: Record<string, Object>[] = await harness.sessionQueuedItems(sessionId);
-    let itemId: string = '';
-    for (const row of rows) {
-      const rpcId: string = jsonStr(row, 'rpcId', '');
-      if (requestId.length > 0 && rpcId === requestId) {
-        itemId = jsonStr(row, 'id', '');
-        break;
-      }
-    }
+    const itemId: string = await this.queuedItemId(harness, sessionId, item.requestRpcId);
     if (itemId.length === 0) {
       throw new Error('这条消息已经不在队列里了（可能已被处理）');
     }

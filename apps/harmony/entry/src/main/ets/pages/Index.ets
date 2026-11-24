@@ -7740,10 +7740,31 @@ struct Index {
                     promptAction.showToast({ message: errorMessage(error) });
                   });
                 })
+              Text(this.tr('撤回'))
+                .fontSize(this.fs(10))
+                .fontColor('rgba(255,255,255,0.86)')
+                .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+                .backgroundColor('rgba(255,255,255,0.16)')
+                .borderRadius(6)
+                .onClick(() => {
+                  this.runtime.withdrawQueuedSend(item).then((note: string) => {
+                    promptAction.showToast({ message: note });
+                  }).catch((error: Error) => {
+                    promptAction.showToast({ message: errorMessage(error) });
+                  });
+                })
             }
             .padding({ left: 6, right: 6, top: 1, bottom: 1 })
             .backgroundColor('rgba(255,255,255,0.16)')
             .borderRadius(6)
+          }
+          if (item.sendState === 'withdrawn') {
+            Text(this.tr('已撤回'))
+              .fontSize(this.fs(10))
+              .fontColor('rgba(255,255,255,0.70)')
+              .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+              .backgroundColor('rgba(0,0,0,0.22)')
+              .borderRadius(6)
           }
           if (item.sendState === 'turn-steer') {
             Text(this.tr('已插入当前回合'))

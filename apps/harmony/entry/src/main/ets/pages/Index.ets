@@ -7721,6 +7721,22 @@ struct Index {
               .fontSize(this.fs(10))
               .fontColor('rgba(255,255,255,0.78)')
           }
+          if (item.sendState === 'turn-queued') {
+            Text(this.tr('排队中 · 等当前回合结束'))
+              .fontSize(this.fs(10))
+              .fontColor('rgba(255,255,255,0.86)')
+              .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+              .backgroundColor('rgba(255,255,255,0.16)')
+              .borderRadius(6)
+          }
+          if (item.sendState === 'turn-steer') {
+            Text(this.tr('已插入当前回合'))
+              .fontSize(this.fs(10))
+              .fontColor('rgba(255,255,255,0.86)')
+              .padding({ left: 6, right: 6, top: 1, bottom: 1 })
+              .backgroundColor('rgba(255,255,255,0.16)')
+              .borderRadius(6)
+          }
           if (item.sendState === 'failed') {
             Row({ space: 8 }) {
               Text(this.tr('发送失败'))

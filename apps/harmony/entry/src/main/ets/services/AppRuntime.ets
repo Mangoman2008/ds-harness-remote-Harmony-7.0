@@ -127,7 +127,14 @@ export class ChatItem {
   actionCommand: string = '';
   /** 跨连接补发出来的审批：主机可能在断线期间已经作废，界面上要提前说一句。 */
   staleHint: string = '';
-  /** 用户消息的发送状态：'' 正常 | 'failed' 发失败（可原地重试） | 'queued' 断线排队中。 */
+  /**
+   * 用户消息的发送状态：
+   *   ''            已发出并进入当前回合
+   *   'failed'      发送失败（可原地重试）
+   *   'queued'      断线排队中（重连后自动补发）
+   *   'turn-queued' 主机正在跑这一轮，消息已入队等下一轮
+   *   'turn-steer'  已插入当前回合（steer 模式）
+   */
   sendState: string = '';
   /** 用户消息里带的图片（标准 base64）；本地刚发的直接用，历史的按 attachmentId 拉。 */
   images: string[] = [];
@@ -2853,6 +2860,7 @@ export class AppRuntime {
         return;
       }
     }
+    const busyAtSend: boolean = this.generating;
     this.generating = true;
     this.errorMsg = '';
     this.notify();
@@ -2860,6 +2868,11 @@ export class AppRuntime {
       await harness.sessionPrompt(sessionId, trimmed, requestId,
         this.steerMode ? 'steer' : 'queue', images, files);
       this.clearRetry();
+      if (busyAtSend) {
+        // 主机正在跑上一轮：这条其实排在队里（或插话），得让用户看见状态，
+        // 否则会以为「发出去了却没反应」。
+        this.setSendState(item.id, this.steerMode ? 'turn-steer' : 'turn-queued');
+      }
     } catch (error) {
       const explained: ErrorExplanation = explainError(errorMessage(error));
       this.errorMsg = explained.text;
@@ -2884,6 +2897,46 @@ export class AppRuntime {
       this.messages = nextFailed;
       this.clearRetry();
       this.notify();
+    }
+  }
+
+  /** 改一条消息的发送状态（会重建数组，保证 ForEach 认得出变化）。 */
+  private setSendState(itemId: string, state: string): void {
+    const next: ChatItem[] = this.messages.slice();
+    let changed: boolean = false;
+    for (let i = 0; i < next.length; i++) {
+      if (next[i].id === itemId && next[i].sendState !== state) {
+        const copy: ChatItem = cloneItem(next[i]);
+        copy.sendState = state;
+        copy.rev += 1;
+        next[i] = copy;
+        changed = true;
+      }
+    }
+    if (changed) {
+      this.messages = next;
+      this.notify();
+    }
+  }
+
+  /** 主机把排队/插话的消息吃掉了：按先来后到清掉状态标记。 */
+  private clearQueuedSendState(): void {
+    const next: ChatItem[] = this.messages.slice();
+    let changed: boolean = false;
+    for (let i = 0; i < next.length; i++) {
+      const state: string = next[i].sendState;
+      if (state === 'turn-queued' || state === 'turn-steer') {
+        const copy: ChatItem = cloneItem(next[i]);
+        copy.sendState = '';
+        copy.rev += 1;
+        next[i] = copy;
+        changed = true;
+        // 一次只清一条：主机按顺序消化
+        break;
+      }
+    }
+    if (changed) {
+      this.messages = next;
     }
   }
 
@@ -5342,6 +5395,10 @@ export class AppRuntime {
       this.turnSteps += 1;
     }
     this.messages = applySessionEvent(this.messages, event);
+    if (event.type === 'user/message') {
+      // 主机确认收到了一条用户消息：把「排队中/已插话」的标记清掉
+      this.clearQueuedSendState();
+    }
     if (event.type === 'user/message' || event.type === 'turn/end') {
       this.scheduleImageHydration();
     }

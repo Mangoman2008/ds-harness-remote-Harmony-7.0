@@ -361,14 +361,19 @@ export class HarnessAlphaClient {
     return '';
   }
 
-  /** 改组队项：edit / remove / steer（steer = 插队进当前回合）。 */
+  /**
+   * 改组队项：edit / remove / steer（steer = 插队进当前回合）。
+   * 网关的 descriptor 要求参数包在 `request` 里（和 session/projections 同款），
+   * 直接平铺 sessionId/itemId/action 会被判成 args 字段不匹配。
+   */
   async updateQueue(sessionId: string, itemId: string, kind: string): Promise<void> {
     const action: Record<string, Object> = { 'kind': kind };
-    await this.callValue('session/updateQueue', {
+    const request: Record<string, Object> = {
       'sessionId': sessionId,
       'itemId': itemId,
       'action': action
-    });
+    };
+    await this.callValue('session/updateQueue', { 'request': request });
   }
 
   /** 主机插件清单（bundles + plugins + settings 合成）。 */

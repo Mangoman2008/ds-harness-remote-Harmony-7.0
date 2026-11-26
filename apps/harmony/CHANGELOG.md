@@ -62,5 +62,7 @@
 - 排队状态收成一行：`排队中 插队 · 撤回`（同一枚淡色胶囊），已插队/已撤回各自只显示一条状态字，不再堆多个标签。
 - 修插队/撤回在真机上报「endpoint is not allowed」：Host 插件的白名单里没有 `session/state`，
   改为从允许的 `session/projections` 的 inbox 投影里按 `source.rpcId` 找队列项 id。
+- 再修插队/撤回的参数形状：网关要求 `session/updateQueue` 的参数包在 `request` 里，
+  平铺 `sessionId/itemId/action` 会被判「args fields do not match the descriptor」。
 
 贡献者：[Mangoman2008](https://github.com/Mangoman2008)。

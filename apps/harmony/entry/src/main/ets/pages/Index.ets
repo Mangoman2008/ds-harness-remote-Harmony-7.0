@@ -11021,12 +11021,12 @@ struct Index {
 
   private overlayGlass(): string {
     // 透一点才看得出是磨砂：弹层背后的会话内容要能隐约透出来
-    return this.isDarkUi ? 'rgba(24,30,46,0.52)' : 'rgba(250,252,255,0.62)';
+    return this.isDarkUi ? 'rgba(26,32,48,0.38)' : 'rgba(252,253,255,0.55)';
   }
 
   /** 弹层背后的遮罩：比面板更淡，避免整体压成一块黑。 */
   private dialogScrim(): string {
-    return this.isDarkUi ? 'rgba(4,8,16,0.30)' : 'rgba(20,30,50,0.18)';
+    return this.isDarkUi ? 'rgba(4,8,16,0.18)' : 'rgba(20,30,50,0.10)';
   }
 
   /** 输入框聚焦时的一层柔光：左右两端各留一点扩散，视觉上和两侧按键的光连成一条。 */

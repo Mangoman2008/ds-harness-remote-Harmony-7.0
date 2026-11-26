@@ -1168,11 +1168,20 @@ struct Index {
   @Builder
   CollabMenu() {
     Menu() {
-      createCollaborationServiceMenuItems([
-        CollaborationServiceFilter.TAKE_PHOTO,
-        CollaborationServiceFilter.SCAN_DOCUMENT,
-        CollaborationServiceFilter.IMAGE_PICKER
-      ], 9)
+      // 方向有区别：PC 发起时可以点名要手机的「拍照 / 文档扫描 / 相册」；
+      // 手机反向往 PC 要，2in1 侧没有能响应拍照/扫描的相机服务，
+      // 只剩「图片（相册）」这一种能落到 PC 的图库上。
+      if (isPhoneDevice()) {
+        createCollaborationServiceMenuItems([
+          CollaborationServiceFilter.IMAGE_PICKER
+        ], 9)
+      } else {
+        createCollaborationServiceMenuItems([
+          CollaborationServiceFilter.TAKE_PHOTO,
+          CollaborationServiceFilter.SCAN_DOCUMENT,
+          CollaborationServiceFilter.IMAGE_PICKER
+        ], 9)
+      }
     }
   }
 
@@ -6525,8 +6534,6 @@ struct Index {
           .onClick(() => {
             this.chooseImageSource();
           })
-          // 长按：跨设备取图（系统「服务协同」菜单，列出附近设备）
-          .bindContextMenu(this.CollabMenu, ResponseType.LongPress)
           // 文件键：和图片键同规格，左边再挂一枚
           Row() {
             Image($r('app.media.ic_attach_file'))

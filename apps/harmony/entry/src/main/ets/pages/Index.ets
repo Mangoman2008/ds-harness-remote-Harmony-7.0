@@ -2162,7 +2162,7 @@ struct Index {
     const source: ChatItem[] = this.messages;
     const last: ChatItem | undefined = source.length > 0 ? source[source.length - 1] : undefined;
     const key: string = `${source.length}|${last === undefined ? 0 : last.rev}|${this.languageMode}`
-      + `|${this.expandedRuns.join(',')}`;
+      + `|${this.expandedRuns.join(',')}|${this.textScaleValue}`;
     if (key === this.chatRowsKey) {
       return this.chatRowsCache;
     }
@@ -3881,6 +3881,9 @@ struct Index {
     } else {
       this.runtime.setLanguageMode(value);
     }
+    // 字号/密度这类改的是 @State 派生的尺寸，ForEach 不换 key 就不会重排；
+    // 这里同时把设置面板版本号推进一格，回到面板时也不用等重开。
+    this.settingsRev = this.settingsRev + 1;
     this.choiceOpen = false;
   }
 
@@ -5456,7 +5459,7 @@ struct Index {
             .width('100%')
             .alignItems(HorizontalAlign.Center)
           }
-        }, (item: ChatItem) => `${item.id}#${item.rev}#${this.languageMode}`
+        }, (item: ChatItem) => `${item.id}#${item.rev}#${this.languageMode}#${this.textScaleValue}`
           + (this.isPendingInteraction(item) ? `#t${this.waitTick}` : ''))
       }
       .layoutWeight(1)
@@ -7238,6 +7241,38 @@ struct Index {
               })
           }
           .alignItems(VerticalAlign.Center)
+        }
+        .width('100%')
+        .padding({ left: 18, right: 18, top: 4, bottom: 12 })
+
+        // —— 文字大小：会话里直接调，改完立刻重排 ——
+        Row({ space: 10 }) {
+          Column({ space: 3 }) {
+            Text(this.tr('文字大小'))
+              .fontSize(this.fs(11))
+              .fontColor(this.pal().text3)
+            Text(this.textScaleLabel())
+              .fontSize(this.fs(12))
+              .fontColor(this.pal().text2)
+          }
+          .alignItems(HorizontalAlign.Start)
+          .layoutWeight(1)
+          ForEach(this.textScaleChoices(), (choice: ThemeChoice) => {
+            Text(choice.label)
+              .fontSize(this.fs(11))
+              .fontColor(this.textScaleMode === choice.value ? '#22D3EE' : this.pal().text3)
+              .padding({ left: 8, right: 8, top: 4, bottom: 4 })
+              .backgroundColor(this.textScaleMode === choice.value
+                ? 'rgba(34,211,238,0.14)' : this.pal().inputBg)
+              .borderRadius(8)
+              .onClick(() => {
+                this.tapHaptic();
+                this.runtime.setTextScaleMode(choice.value);
+                this.textScaleMode = choice.value;
+                this.textScaleValue = this.runtime.textScale();
+                this.settingsRev = this.settingsRev + 1;
+              })
+          }, (choice: ThemeChoice) => 'scale:' + choice.value + ':' + this.textScaleMode)
         }
         .width('100%')
         .padding({ left: 18, right: 18, top: 4, bottom: 12 })

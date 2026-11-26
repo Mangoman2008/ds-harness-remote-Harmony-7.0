@@ -65,24 +65,24 @@ export function applyTint(p: Palette, tint: number, dark: boolean): Palette {
   out.text2 = p.text2;
   out.text3 = p.text3;
   if (tint === 1) {
-    out.bg = dark ? '#05101F' : '#EDF4FB';
-    out.panel = dark ? '#081A2E' : '#F7FBFF';
-    out.card = dark ? 'rgba(88,166,255,0.07)' : '#FFFFFF';
+    out.bg = dark ? '#05101F' : '#E2EBF6';
+    out.panel = dark ? '#081A2E' : 'rgba(246,249,254,0.92)';
+    out.card = dark ? 'rgba(88,166,255,0.07)' : 'rgba(255,255,255,0.82)';
     out.chip = dark ? 'rgba(88,166,255,0.10)' : 'rgba(30,90,160,0.06)';
   } else if (tint === 2) {
-    out.bg = dark ? '#06140F' : '#EEF7F0';
-    out.panel = dark ? '#0A1C15' : '#F7FCF8';
-    out.card = dark ? 'rgba(52,211,153,0.07)' : '#FFFFFF';
+    out.bg = dark ? '#06140F' : '#E3F0E7';
+    out.panel = dark ? '#0A1C15' : 'rgba(246,250,247,0.92)';
+    out.card = dark ? 'rgba(52,211,153,0.07)' : 'rgba(255,255,255,0.82)';
     out.chip = dark ? 'rgba(52,211,153,0.10)' : 'rgba(20,120,80,0.06)';
   } else if (tint === 3) {
-    out.bg = dark ? '#17110A' : '#FBF4E9';
-    out.panel = dark ? '#1F1810' : '#FFFBF3';
-    out.card = dark ? 'rgba(240,180,90,0.08)' : '#FFFFFF';
+    out.bg = dark ? '#17110A' : '#F6EDDF';
+    out.panel = dark ? '#1F1810' : 'rgba(254,250,244,0.92)';
+    out.card = dark ? 'rgba(240,180,90,0.08)' : 'rgba(255,255,255,0.82)';
     out.chip = dark ? 'rgba(240,180,90,0.10)' : 'rgba(150,100,20,0.06)';
   } else if (tint === 4) {
-    out.bg = dark ? '#140A16' : '#FAEFF7';
-    out.panel = dark ? '#1D0F1F' : '#FFFAFD';
-    out.card = dark ? 'rgba(217,120,220,0.08)' : '#FFFFFF';
+    out.bg = dark ? '#140A16' : '#F4E8F2';
+    out.panel = dark ? '#1D0F1F' : 'rgba(254,249,252,0.92)';
+    out.card = dark ? 'rgba(217,120,220,0.08)' : 'rgba(255,255,255,0.82)';
     out.chip = dark ? 'rgba(217,120,220,0.10)' : 'rgba(120,20,110,0.06)';
   }
   return out;
@@ -90,14 +90,15 @@ export function applyTint(p: Palette, tint: number, dark: boolean): Palette {
 
 export function lightPalette(): Palette {
   const p: Palette = new Palette();
-  p.bg = '#F2F5FA';
-  p.panel = '#FFFFFF';
+  // 浅色不做纯白：底压到冷灰蓝、卡片留一点透，画面才不会一片惨白。
+  p.bg = '#E7EDF6';
+  p.panel = 'rgba(248,250,254,0.92)';
   p.backdrop = 'rgba(15,23,42,0.35)';
-  p.card = '#FFFFFF';
-  p.chip = 'rgba(15,23,42,0.05)';
-  p.inputBg = '#FFFFFF';
-  p.border = 'rgba(15,23,42,0.08)';
-  p.borderStrong = 'rgba(15,23,42,0.14)';
+  p.card = 'rgba(255,255,255,0.82)';
+  p.chip = 'rgba(15,23,42,0.055)';
+  p.inputBg = 'rgba(255,255,255,0.78)';
+  p.border = 'rgba(15,23,42,0.09)';
+  p.borderStrong = 'rgba(15,23,42,0.15)';
   p.text = '#1B2437';
   p.text2 = '#5B6478';
   p.text3 = '#98A1B3';

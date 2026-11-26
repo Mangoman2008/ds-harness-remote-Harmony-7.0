@@ -1,4 +1,5 @@
 import { preferences } from '@kit.ArkData';
+import { fileIo } from '@kit.CoreFileKit';
 import { common } from '@kit.AbilityKit';
 import { asset } from '@kit.AssetStoreKit';
 import { util } from '@kit.ArkTS';
@@ -112,6 +113,12 @@ export class SecureStorageUnavailableError extends Error {
 /** Preferences-backed persistent storage for config, identity and tokens. */
 export class SecureStore {
   private prefs: preferences.Preferences | undefined = undefined;
+  /**
+   * 大块本地素材（壁纸、首页立绘）走沙箱文件，不进 Preferences：
+   * Preferences 的 string 值上限只有 8 KB，压过的 JPEG base64 一定超，
+   * 而且是「同步写不抛、flush 才失败」——以前壁纸/立绘重启就没了就是这个原因。
+   */
+  private mediaDir: string = '';
   /** In-memory mirror of the pinned Host keys, so callers keep a synchronous read. */
   private hostPins: Record<string, string> = {};
   /** False once the system asset store refused a write; surfaced in diagnostics only. */
@@ -121,6 +128,17 @@ export class SecureStore {
     if (this.prefs === undefined) {
       const options: preferences.Options = { name: 'dshremote.store' };
       this.prefs = await preferences.getPreferences(context, options);
+    }
+    if (this.mediaDir.length === 0) {
+      try {
+        this.mediaDir = context.filesDir + '/media';
+        if (!fileIo.accessSync(this.mediaDir)) {
+          fileIo.mkdirSync(this.mediaDir);
+        }
+      } catch (error) {
+        this.mediaDir = '';
+        logWarn('media dir init failed');
+      }
     }
     await this.migratePlaintextSecrets();
     await this.reloadHostPins();
@@ -889,15 +907,21 @@ export class SecureStore {
   }
 
   loadHomeMascotImage(): string {
-    return this.getSync(KEY_HOME_MASCOT_IMG, '');
+    const fromFile: string = this.readMedia('homeMascot.txt');
+    if (fromFile.length > 0) {
+      return fromFile;
+    }
+    const legacy: string = this.getSync(KEY_HOME_MASCOT_IMG, '');
+    if (legacy.length > 0) {
+      // 老版本存在 Preferences 里（大概率已经存坏了），读到就搬进文件并清掉
+      this.writeMedia('homeMascot.txt', legacy);
+      this.deleteSyncKey(KEY_HOME_MASCOT_IMG);
+    }
+    return legacy;
   }
 
   saveHomeMascotImage(base64: string): void {
-    try {
-      this.putSync(KEY_HOME_MASCOT_IMG, base64);
-    } catch (error) {
-      logWarn('home mascot image save failed');
-    }
+    this.writeMedia('homeMascot.txt', base64);
   }
 
   saveHomeMascot(enabled: boolean): void {
@@ -975,19 +999,20 @@ export class SecureStore {
   }
 
   loadWallpaper(): string {
-    return this.getSync(KEY_WALLPAPER, '');
+    const fromFile: string = this.readMedia('wallpaper.txt');
+    if (fromFile.length > 0) {
+      return fromFile;
+    }
+    const legacy: string = this.getSync(KEY_WALLPAPER, '');
+    if (legacy.length > 0) {
+      this.writeMedia('wallpaper.txt', legacy);
+      this.deleteSyncKey(KEY_WALLPAPER);
+    }
+    return legacy;
   }
 
   saveWallpaper(base64: string): void {
-    try {
-      if (base64.length === 0) {
-        this.deleteSyncKey(KEY_WALLPAPER);
-      } else {
-        this.putSync(KEY_WALLPAPER, base64);
-      }
-    } catch (error) {
-      logWarn('wallpaper save failed');
-    }
+    this.writeMedia('wallpaper.txt', base64);
   }
 
   saveSecretMask(enabled: boolean): void {
@@ -995,6 +1020,48 @@ export class SecureStore {
       this.putSync(KEY_SECRET_MASK, enabled ? '1' : '0');
     } catch (error) {
       logWarn('secret mask save failed');
+    }
+  }
+
+  /** 读沙箱里的素材文本；没有或读失败都返回空串。 */
+  private readMedia(name: string): string {
+    if (this.mediaDir.length === 0) {
+      return '';
+    }
+    const path: string = this.mediaDir + '/' + name;
+    try {
+      if (!fileIo.accessSync(path)) {
+        return '';
+      }
+      return fileIo.readTextSync(path);
+    } catch (error) {
+      logWarn('media read failed ' + name);
+      return '';
+    }
+  }
+
+  /** 写/删沙箱素材；空串视为删除。 */
+  private writeMedia(name: string, text: string): void {
+    if (this.mediaDir.length === 0) {
+      return;
+    }
+    const path: string = this.mediaDir + '/' + name;
+    try {
+      if (text.length === 0) {
+        if (fileIo.accessSync(path)) {
+          fileIo.unlinkSync(path);
+        }
+        return;
+      }
+      const file = fileIo.openSync(path,
+        fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.CREATE | fileIo.OpenMode.TRUNC);
+      try {
+        fileIo.writeSync(file.fd, text);
+      } finally {
+        fileIo.closeSync(file);
+      }
+    } catch (error) {
+      logWarn('media write failed ' + name);
     }
   }
 

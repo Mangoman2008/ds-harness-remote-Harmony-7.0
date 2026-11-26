@@ -3469,8 +3469,10 @@ struct Index {
       return this.uiWallpaperDim === 0 ? 'rgba(10,14,24,0.42)'
         : (this.uiWallpaperDim === 2 ? 'rgba(10,14,24,0.76)' : 'rgba(10,14,24,0.62)');
     }
-    return this.uiWallpaperDim === 0 ? 'rgba(247,250,255,0.44)'
-      : (this.uiWallpaperDim === 2 ? 'rgba(247,250,255,0.78)' : 'rgba(247,250,255,0.64)');
+    // 浅色蒙层压成冷灰蓝而不是奶白：壁纸还在，但不会把整屏刷成一片白，
+    // 也不会让壁纸的暖色直接透到气泡上。
+    return this.uiWallpaperDim === 0 ? 'rgba(214,223,237,0.34)'
+      : (this.uiWallpaperDim === 2 ? 'rgba(206,215,230,0.76)' : 'rgba(210,219,234,0.58)');
   }
 
   private wallpaperDimLabel(): string {
@@ -7669,7 +7671,12 @@ struct Index {
       }
       .width('100%')
       .constraintSize({ maxWidth: 520 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20, bottomLeft: 0, bottomRight: 0 })
       .border({ width: 1, color: this.pal().border })
       }, (rev: number) => 'session-body-' + rev)
@@ -10740,7 +10747,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 560 })
       .padding({ left: 20, right: 20, top: 16, bottom: 22 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 22, topRight: 22 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 340 })
@@ -11002,7 +11014,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 520 })
       .padding({ left: 20, right: 20, top: 16, bottom: 22 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 22, topRight: 22 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 320 })

@@ -5354,20 +5354,29 @@ export class AppRuntime {
   private handoffTimer: number = -1;
   private handoffTries: number = 0;
 
-  /** 源端：当前有没有值得交出去的东西（没连主机 / 没开会话就没有）。 */
+  /** 源端：手里有没有值得交出去的上下文（连上主机就算，哪怕还没开会话）。 */
   continueReady(): boolean {
-    return this.currentSessionId.length > 0 && this.connectedDeviceId.length > 0;
+    return this.connectedDeviceId.length > 0 || this.keepAliveDeviceId.length > 0;
   }
 
-  /** 源端：接续参数。键名固定，两端版本要一致。 */
+  /**
+   * 源端：接续参数。键名固定，两端版本要一致。
+   * 会话 id 允许为空：那说明这边还停在会话列表，交出去的只是「这台主机」，
+   * 对面接上后落在同一台主机的会话列表里——**绝不能因为没开会话就拒绝流转**，
+   * 那正是系统弹「流转失败」的原因（Continuation: app reject）。
+   */
   continuePayload(): Record<string, Object> | undefined {
-    if (!this.continueReady()) {
+    const hostId: string = this.connectedDeviceId.length > 0
+      ? this.connectedDeviceId : this.keepAliveDeviceId;
+    if (hostId.length === 0) {
       return undefined;
     }
+    const sessionId: string = this.currentSessionId.length > 0
+      ? this.currentSessionId : this.pendingOpenSessionId;
     const payload: Record<string, Object> = {};
-    payload['dshHost'] = this.connectedDeviceId;
+    payload['dshHost'] = hostId;
     payload['dshHostName'] = this.connectedHostDisplayName();
-    payload['dshSession'] = this.currentSessionId;
+    payload['dshSession'] = sessionId;
     payload['dshTitle'] = this.currentSessionTitle;
     return payload;
   }
@@ -5378,7 +5387,7 @@ export class AppRuntime {
       return;
     }
     const sessionId: string = jsonStr(params, 'dshSession', '');
-    if (sessionId.length === 0) {
+    if (jsonStr(params, 'dshHost', '').length === 0) {
       return;
     }
     this.handoffHostId = jsonStr(params, 'dshHost', '');
@@ -5421,19 +5430,24 @@ export class AppRuntime {
     if (this.handoffTries > 26) {
       const hostName: string = this.handoffHostName.length > 0 ? this.handoffHostName : '主机';
       this.stopHandoffPursuit();
-      this.errorMsg = '流转过来的会话没能接上：' + hostName + ' 不在线，或这台设备还没登录同一账号';
+      this.errorMsg = '流转没能接上：' + hostName + ' 不在线，或这台设备还没登录同一账号';
       this.notify();
       return;
     }
     if (this.phase === PHASE_CHAT) {
-      if (this.currentSessionId === sessionId) {
+      if (this.connectedDeviceId !== this.handoffHostId) {
+        // 连着的是别的主机：换过去（流转就是要换那台）
+        LinkLog.write('life', '流转：从主机 ' + this.connectedDeviceId + ' 切到 ' + this.handoffHostId);
+        this.keepAliveToDevices();
+        return;
+      }
+      if (sessionId.length === 0 || this.currentSessionId === sessionId) {
         this.stopHandoffPursuit();
         return;
       }
-      if (this.handoffHostId.length === 0 || this.connectedDeviceId === this.handoffHostId) {
-        this.requestOpenSession(sessionId);
-        this.stopHandoffPursuit();
-      }
+      this.requestOpenSession(sessionId);
+      LinkLog.write('life', '流转：已请求打开会话 ' + sessionId.slice(0, 10));
+      this.stopHandoffPursuit();
       return;
     }
     if (this.phase !== PHASE_DEVICES) {
@@ -5453,9 +5467,12 @@ export class AppRuntime {
       }
       return;
     }
-    LinkLog.write('life', '流转：连上主机 ' + target.deviceId + ' 并打开会话');
+    LinkLog.write('life', '流转：连上主机 ' + target.deviceId
+      + (sessionId.length > 0 ? ' 并打开会话' : '（只交出了主机）'));
     await this.connectDevice(target.deviceId);
-    this.requestOpenSession(sessionId);
+    if (sessionId.length > 0) {
+      this.requestOpenSession(sessionId);
+    }
     this.stopHandoffPursuit();
   }
 

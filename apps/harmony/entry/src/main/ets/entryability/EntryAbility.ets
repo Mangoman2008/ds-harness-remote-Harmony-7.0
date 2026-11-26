@@ -61,7 +61,7 @@ export default class EntryAbility extends UIAbility {
   onContinue(wantParam: Record<string, Object>): AbilityConstant.OnContinueResult {
     const payload: Record<string, Object> | undefined = getAppRuntime().continuePayload();
     if (payload === undefined) {
-      LinkLog.write('life', '流转：当前没有可交出去的会话，拒绝');
+      LinkLog.write('life', '流转：还没连上任何主机，拒绝');
       return AbilityConstant.OnContinueResult.REJECT;
     }
     const keys: string[] = Object.keys(payload);
@@ -79,7 +79,19 @@ export default class EntryAbility extends UIAbility {
   onWindowStageCreate(windowStage: window.WindowStage): void {
     // Main window is created, set main page for this ability
     hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageCreate');
+    this.setupWindowStage(windowStage);
+  }
 
+  /**
+   * 从别的设备流转过来时，系统**不会**调 onWindowStageCreate，而是调这个。
+   * 原来没实现，于是目标端窗口起来了却没有内容——表现就是「流转之后打不开」。
+   */
+  onWindowStageRestore(windowStage: window.WindowStage): void {
+    hilog.info(DOMAIN, 'testTag', '%{public}s', 'Ability onWindowStageRestore');
+    this.setupWindowStage(windowStage);
+  }
+
+  private setupWindowStage(windowStage: window.WindowStage): void {
     this.mainWindow = windowStage.getMainWindowSync();
     // 长时任务要用 UIAbilityContext：交给保活模块，连着主机时申请、断开时释放
     KeepAlive.bind(this.context as common.UIAbilityContext);

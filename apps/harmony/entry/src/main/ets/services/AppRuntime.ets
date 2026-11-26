@@ -5975,6 +5975,38 @@ function addUserMessage(items: ChatItem[], data: Record<string, Object>, time: n
       }
     }
   }
+  // 主机回显偶尔不带 rpcId（带附件的消息尤其如此）：按文本 + 时间兜底认领本地那条，
+  // 否则同一句话会在聊天里出现两个气泡，看起来像「发了两份」。
+  if (rpcId.length === 0) {
+    for (let i = next.length - 1; i >= 0; i--) {
+      const candidate: ChatItem = next[i];
+      if (candidate.kind !== 'user' || candidate.seq > 0 || candidate.id.indexOf('local:') !== 0) {
+        continue;
+      }
+      if (candidate.text !== text) {
+        continue;
+      }
+      if (time > 0 && candidate.timestamp > 0 && Math.abs(time - candidate.timestamp) > 60000) {
+        continue;
+      }
+      const settled: ChatItem = cloneItem(candidate);
+      settled.id = id;
+      if (attachmentIds.length > 0) {
+        settled.imageAttachmentIds = attachmentIds;
+        settled.imageRefs = attachmentRefs;
+      }
+      if (files.length > 0) {
+        settled.files = files;
+      }
+      if (time > 0) {
+        settled.timestamp = time;
+      }
+      settled.rev += 1;
+      next[i] = settled;
+      LinkLog.write('submit', '回显无 rpcId，按文本认领 id=' + id.slice(0, 8));
+      return next;
+    }
+  }
   for (const item of next) {
     if (item.id === id) {
       return items;

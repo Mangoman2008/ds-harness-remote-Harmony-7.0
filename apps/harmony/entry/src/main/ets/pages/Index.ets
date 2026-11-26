@@ -28,6 +28,9 @@ import {
 } from '../services/Adaptive';
 import { PickedImage, captureImage, compressPixelMap, pickImages } from '../services/ImagePicker';
 import { CrossDevice } from '../services/CrossDevice';
+import { CrossDeviceCapture } from '../services/CrossDeviceCapture';
+import { CollaborationServiceFilter, createCollaborationServiceMenuItems, CollaborationServiceStateDialog }
+  from '@kit.ServiceCollaborationKit';
 import { MAX_FILE_BYTES, PickedFile, pickFiles } from '../services/FilePicker';
 import { SavedProfile } from '../services/SecureStore';
 import { PromptFilePart, PromptImagePart } from '../net/HarnessClient';
@@ -402,6 +405,8 @@ struct Index {
   @State imageMenuOpen: boolean = false;
   /** 附近在线设备名：有才显示「用附近设备拍照」那一行。 */
   @State nearbyDevices: string[] = [];
+  /** 跨设备取图（服务协同）的进度文案。 */
+  @State collabMsg: string = '';
   @State webConsoleOpen: boolean = false;
   @State webConsoleSrc: string = '';
   @State webConsoleInput: string = '';
@@ -1159,6 +1164,60 @@ struct Index {
     });
   }
 
+  /** 系统「服务协同」菜单：列出附近可用的华为设备，并给出拍照 / 扫描 / 相册三种能力。 */
+  @Builder
+  CollabMenu() {
+    Menu() {
+      createCollaborationServiceMenuItems([
+        CollaborationServiceFilter.TAKE_PHOTO,
+        CollaborationServiceFilter.SCAN_DOCUMENT,
+        CollaborationServiceFilter.IMAGE_PICKER
+      ], 9)
+    }
+  }
+
+  /**
+   * 协同回传：对端（手机）拍完/选完，图片字节从这里进来。
+   * 状态码见 CrossDeviceCapture 的注释。
+   */
+  private onCollabState(stateCode: number, bufferType: string, buffer: ArrayBuffer): void {
+    const size: number = buffer === undefined ? 0 : buffer.byteLength;
+    LinkLog.write('collab', 'state=' + stateCode + ' type=' + bufferType + ' bytes=' + size);
+    if (stateCode === 1001202004) {
+      CrossDeviceCapture.reset();
+      this.collabMsg = this.tr('已在其它设备上开始，请在那台设备拍照/选图…');
+      return;
+    }
+    if (stateCode === 1001202006) {
+      this.collabMsg = this.tr('正在回传…');
+      return;
+    }
+    if (stateCode === 0 && size > 0) {
+      const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+      CrossDeviceCapture.accept(buffer, context.filesDir).then((picked: PickedImage | undefined) => {
+        if (picked === undefined) {
+          this.collabMsg = this.tr('接收中…（数据还不完整）');
+          return;
+        }
+        this.pendingImages = this.pendingImages.concat([picked]);
+        this.collabMsg = '';
+        this.imageMenuOpen = false;
+        promptAction.showToast({ message: this.tr('已从其它设备取到图片') });
+      }).catch(() => {
+        this.collabMsg = this.tr('取图失败');
+      });
+      return;
+    }
+    if (stateCode === 1001202001 || stateCode === 1001202003) {
+      CrossDeviceCapture.reset();
+      this.collabMsg = this.tr('已取消');
+      return;
+    }
+    if (stateCode !== 0 && stateCode !== 1001202005) {
+      this.collabMsg = this.tr('取图失败（') + stateCode + '）';
+    }
+  }
+
   /** 图片键弹出的小菜单（自绘，和别的弹层同一套磨砂）。 */
   @Builder
   ImageSourceSheet() {
@@ -1184,15 +1243,37 @@ struct Index {
           this.imageMenuOpen = false;
           this.capturePhoto();
         })
-        // 「跨设备拍照」是系统相机在 2in1/平板上的能力（借用附近手机的摄像头）。
-        // 手机端的系统相机只列本机摄像头，所以手机上这一行没有意义，不显示。
-        if (!isPhoneDevice() && this.nearbyDevices.length > 0) {
-          this.SettingsRow(this.tr('用附近设备拍照'), this.nearbyDevices.join('、'), false, () => {
-            this.imageMenuOpen = false;
-            promptAction.showToast({ message: this.tr('在相机界面切到附近设备') });
-            this.capturePhoto();
-          })
+        // 跨设备取图：走系统的「服务协同」（WPS 那条链路）。
+        // 请求方发起后由**对端系统**的相机/图库出图再回传，两端都保留这个入口；
+        // 同时图片键长按也能直接弹这个菜单（浮层里点不开时还有一条路）。
+        Button() {
+          Row({ space: 10 }) {
+            Text(this.tr('从其他设备获取'))
+              .fontSize(14)
+              .fontColor(this.pal().text)
+            Blank()
+            Text(this.collabMsg.length > 0
+              ? this.collabMsg
+              : (this.nearbyDevices.length > 0
+                ? this.nearbyDevices.join('、')
+                : this.tr('拍照 / 扫描 / 相册')))
+              .fontSize(11)
+              .fontColor(this.collabMsg.length > 0 ? '#22D3EE' : this.pal().text3)
+              .maxLines(1)
+              .constraintSize({ maxWidth: 200 })
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+            Text('›')
+              .fontSize(15)
+              .fontColor(this.pal().text3)
+          }
+          .width('100%')
         }
+        .width('100%')
+        .padding({ top: 13, bottom: 13, left: 14, right: 14 })
+        .backgroundColor(this.pal().card)
+        .borderRadius(12)
+        .border({ width: 1, color: this.pal().border })
+        .bindMenu(this.CollabMenu)
         Text(this.tr('取消'))
           .fontSize(14)
           .fontColor(this.pal().text2)
@@ -2908,6 +2989,16 @@ struct Index {
       if (this.imageMenuOpen) {
         this.ImageSourceSheet()
       }
+      // 协同接收组件：必须真实渲染（1×1 即可，不能 0×0，否则框架不投递数据），
+      // 且不能吃触摸（否则会挡住底下的按钮）。
+      CollaborationServiceStateDialog({
+        onState: (stateCode: number, bufferType: string, buffer: ArrayBuffer): void => {
+          this.onCollabState(stateCode, bufferType, buffer);
+        }
+      })
+        .width(1)
+        .height(1)
+        .hitTestBehavior(HitTestMode.Transparent)
       if (this.webConsoleOpen) {
         this.WebConsoleOverlay()
       }
@@ -6434,6 +6525,8 @@ struct Index {
           .onClick(() => {
             this.chooseImageSource();
           })
+          // 长按：跨设备取图（系统「服务协同」菜单，列出附近设备）
+          .bindContextMenu(this.CollabMenu, ResponseType.LongPress)
           // 文件键：和图片键同规格，左边再挂一枚
           Row() {
             Image($r('app.media.ic_attach_file'))

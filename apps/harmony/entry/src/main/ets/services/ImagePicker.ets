@@ -48,6 +48,11 @@ export async function pickImages(maxCount: number): Promise<PickedImage[]> {
   return out;
 }
 
+/** 从沙箱文件读一张图（跨设备回传的字节先落盘，再走同一套压缩）。 */
+export async function pickedImageFromFile(path: string): Promise<PickedImage> {
+  return await loadAndCompress(path);
+}
+
 /**
  * 用系统相机拍一张（鸿蒙特性：走的是系统相机，2in1/无摄像头设备上由系统决定
  * 是否调用附近手机的摄像头，也就是「跨设备拍照」）。

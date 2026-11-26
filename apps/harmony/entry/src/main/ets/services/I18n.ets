@@ -445,6 +445,15 @@ function buildEnglish(): Map<string, string> {
   map.set('加载中…', 'Loading…');
   map.set('加载更早的消息', 'Load earlier messages');
   map.set('在相机界面切到附近设备', 'Switch to the nearby device inside the camera');
+  map.set('长按图片键 · 从其他设备取图', 'Long-press the image key to grab a photo from another device');
+  map.set('从其他设备获取', 'Get from another device');
+  map.set('拍照 / 扫描 / 相册', 'Photo / scan / gallery');
+  map.set('已在其它设备上开始，请在那台设备拍照/选图…', 'Started on the other device — take a photo or pick an image there…');
+  map.set('正在回传…', 'Transferring…');
+  map.set('接收中…（数据还不完整）', 'Receiving… (data incomplete)');
+  map.set('已从其它设备取到图片', 'Image received from the other device');
+  map.set('取图失败', 'Could not get the image');
+  map.set('取图失败（', 'Could not get the image (');
   map.set('用附近设备拍照', 'Shoot with a nearby device');
   map.set('系统相机', 'System camera');
   map.set('本机摄像头 · 也可用附近设备', 'Built-in camera · or a nearby device');

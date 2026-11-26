@@ -1154,6 +1154,8 @@ export class AppRuntime {
       }));
       this.autoConnectSuppressed = false;
       // 连着主机时申请长时任务：熄屏/后台不再被系统冻结，心跳与直连都活着
+      // 手机还会顺手把「胶囊」要轮播的几行字交给保活模块（PC 不启用）
+      KeepAlive.setCapsuleProvider((): string[] => this.capsuleLines());
       KeepAlive.start().catch(() => undefined);
       // 精简历史：主机侧把历史工具参数/输出转摘要（remote.history.configure）
       this.applyCompactHistory().catch(() => undefined);
@@ -4681,6 +4683,43 @@ export class AppRuntime {
       }
     }
     return position;
+  }
+
+  /**
+   * 后台胶囊（手机状态栏实况窗）要轮播的几行字。
+   * 一行进胶囊、下一行进副标题，所以只放「这一眼有用」的信息，别写句子。
+   */
+  capsuleLines(): string[] {
+    const lines: string[] = [];
+    const title: string = this.currentSessionTitle.length > 0 ? this.currentSessionTitle : 'DSH 远程';
+    lines.push(title.length > 16 ? title.slice(0, 16) + '…' : title);
+    if (this.generating) {
+      const elapsed: string = this.turnStartedAt > 0
+        ? AppRuntime.durationText(Date.now() - this.turnStartedAt) : '';
+      let running: string = '生成中';
+      if (elapsed.length > 0) {
+        running += ' · ' + elapsed;
+      }
+      if (this.turnSteps > 0) {
+        running += ' · ' + this.turnSteps + ' 步';
+      }
+      lines.push(running);
+    } else {
+      lines.push(this.pendingInteractions.size > 0
+        ? '等你确认 · ' + this.pendingInteractions.size + ' 条'
+        : '空闲 · 等你发指令');
+    }
+    lines.push(this.transportLabel.length > 0 ? '链路 ' + this.transportLabel : '未连接');
+    const host: string = this.connectedHostDisplayName();
+    if (host.length > 0) {
+      lines.push('主机 ' + (host.length > 14 ? host.slice(0, 14) + '…' : host));
+    }
+    return lines;
+  }
+
+  /** 让胶囊立刻换成最新一行（切后台、发消息、回合结束时各叫一次）。 */
+  refreshCapsule(): void {
+    KeepAlive.setCapsuleProvider((): string[] => this.capsuleLines());
   }
 
   static durationText(ms: number): string {

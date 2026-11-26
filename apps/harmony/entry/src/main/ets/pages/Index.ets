@@ -568,12 +568,16 @@ struct Index {
   onPageShow(): void {
     // 回前台：补查网络状态并做一次链路体检（后台待久了 socket 往往是半开的）。
     // 原来这里只把 appBackground 置回 false，连接死没死全靠用户发消息才知道。
+    LinkLog.write('life', '页面回到前台');
     this.runtime.onAppForeground();
     this.runtime.appBackground = false;
   }
 
   onPageHide(): void {
+    // 留痕：窗口被收起/切走时记一条，排查「点了什么就没了」有据可查
+    LinkLog.write('life', '页面转到后台');
     this.runtime.appBackground = true;
+    this.runtime.refreshCapsule();
   }
 
   private measureInsets(): void {
@@ -960,6 +964,27 @@ struct Index {
     const next: PromptFilePart[] = this.pendingFiles.slice();
     next.splice(index, 1);
     this.pendingFiles = next;
+  }
+
+  /**
+   * 回车键上有没有按 Ctrl / ⌘。
+   * getModifierKeyState 在部分 2in1 版本会抛异常，绝不能让它把异常扔回 ArkUI 的事件分发，
+   * 所以这里单独包一层；取不到就当作没按修饰键（退化成普通换行，不会误发消息）。
+   */
+  private ctrlEnterPressed(event: KeyEvent): boolean {
+    try {
+      const probe: ((keys: Array<string>) => boolean) | undefined = event.getModifierKeyState;
+      if (probe === undefined) {
+        return false;
+      }
+      if (probe(['Ctrl'])) {
+        return true;
+      }
+      return probe(['Meta']);
+    } catch (error) {
+      LinkLog.write('key', '修饰键读取失败：' + errorMessage(error));
+      return false;
+    }
   }
 
   private sendTap(): void {
@@ -6323,11 +6348,17 @@ struct Index {
               if (event.type !== KeyType.Down || event.keyCode !== KeyCode.KEYCODE_ENTER) {
                 return;
               }
-              // ArkUI 的 KeyEvent 没有 ctrlKey 字段，修饰键要走 getModifierKeyState
-              const ctrl: boolean = event.getModifierKeyState !== undefined
-                ? event.getModifierKeyState(['Ctrl', 'Meta']) : false;
-              if (ctrl) {
+              // ArkUI 的 KeyEvent 没有 ctrlKey 字段，修饰键要走 getModifierKeyState。
+              // 这一步在 2in1 上偶尔会抛（抛进事件分发会把整页打掉，看着就像「程序退出了」），
+              // 所以整个处理都包在 try 里，并且留痕，方便下次从 link.log 定位。
+              if (!this.ctrlEnterPressed(event)) {
+                return;
+              }
+              try {
                 this.sendTap();
+                LinkLog.write('key', 'Ctrl+Enter 发送完成');
+              } catch (error) {
+                LinkLog.write('key', 'Ctrl+Enter 发送异常：' + errorMessage(error));
               }
             })
             // 聚焦时整块底提亮（等同于两侧按键被点亮），背景层一定可见
@@ -10455,11 +10486,15 @@ struct Index {
             if (event.type !== KeyType.Down || event.keyCode !== KeyCode.KEYCODE_ENTER) {
               return;
             }
-            const ctrl: boolean = event.getModifierKeyState !== undefined
-              ? event.getModifierKeyState(['Ctrl', 'Meta']) : false;
-            if (ctrl) {
+            if (!this.ctrlEnterPressed(event)) {
+              return;
+            }
+            try {
               this.composerExpanded = false;
               this.sendTap();
+              LinkLog.write('key', 'Ctrl+Enter 发送完成（长编辑）');
+            } catch (error) {
+              LinkLog.write('key', 'Ctrl+Enter 发送异常（长编辑）：' + errorMessage(error));
             }
           })
           .backgroundColor(this.pal().inputBg)

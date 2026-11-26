@@ -37,6 +37,16 @@ import { vibrator } from '@kit.SensorServiceKit';
 import { util } from '@kit.ArkTS';
 import BuildProfile from 'BuildProfile';
 
+
+/** 这台设备是手机吗（决定回车是发送还是换行、要不要申请后台胶囊）。 */
+function isPhoneDevice(): boolean {
+  try {
+    return deviceInfo.deviceType === 'phone';
+  } catch (error) {
+    return false;
+  }
+}
+
 /** 桌宠精灵图放大倍数（像素风，整数倍最清晰）。 */
 const PET_SCALE: number = 1.2;
 
@@ -971,20 +981,28 @@ struct Index {
    * getModifierKeyState 在部分 2in1 版本会抛异常，绝不能让它把异常扔回 ArkUI 的事件分发，
    * 所以这里单独包一层；取不到就当作没按修饰键（退化成普通换行，不会误发消息）。
    */
-  private ctrlEnterPressed(event: KeyEvent): boolean {
+  private modifierPressed(event: KeyEvent, name: string): boolean {
     try {
       const probe: ((keys: Array<string>) => boolean) | undefined = event.getModifierKeyState;
-      if (probe === undefined) {
-        return false;
-      }
-      if (probe(['Ctrl'])) {
-        return true;
-      }
-      return probe(['Meta']);
+      return probe === undefined ? false : probe([name]);
     } catch (error) {
       LinkLog.write('key', '修饰键读取失败：' + errorMessage(error));
       return false;
     }
+  }
+
+  private ctrlEnterPressed(event: KeyEvent): boolean {
+    return this.modifierPressed(event, 'Ctrl') || this.modifierPressed(event, 'Meta');
+  }
+
+  /**
+   * 回车是不是「发送」：
+   * - 手机：回车就是换行（屏幕小，误发代价高），发送靠右下角那颗键；
+   * - PC/2in1：回车上屏（Enter 发送、Shift+Enter 换行），这是桌面聊天软件的通用约定。
+   *   原来绑的 Ctrl+Enter 在鸿蒙 PC 上会被输入法吃掉，实测根本收不到。
+   */
+  private enterSends(): boolean {
+    return !isPhoneDevice();
   }
 
   private sendTap(): void {
@@ -6337,7 +6355,7 @@ struct Index {
               ? (this.compactDock() ? this.tr('正在生成…') : this.tr('正在生成，可插话…'))
               : (this.runtime.steerMode
                 ? (this.compactDock() ? this.tr('插话发送…') : this.tr('插话发送（长按发送键切换）'))
-                : (this.isWideLayout() ? this.tr('发送消息…（Enter 换行 · Ctrl+Enter 发送）')
+                : (this.isWideLayout() ? this.tr('发送消息…（Enter 发送 · Shift+Enter 换行）')
                   : this.tr('发送消息…'))) })
             .width('100%')
             .constraintSize({ minHeight: this.compactDock() ? 44 : 46,
@@ -6348,17 +6366,28 @@ struct Index {
               if (event.type !== KeyType.Down || event.keyCode !== KeyCode.KEYCODE_ENTER) {
                 return;
               }
-              // ArkUI 的 KeyEvent 没有 ctrlKey 字段，修饰键要走 getModifierKeyState。
-              // 这一步在 2in1 上偶尔会抛（抛进事件分发会把整页打掉，看着就像「程序退出了」），
-              // 所以整个处理都包在 try 里，并且留痕，方便下次从 link.log 定位。
-              if (!this.ctrlEnterPressed(event)) {
-                return;
-              }
+              // ArkUI 的 KeyEvent 没有 ctrlKey 字段，修饰键要走 getModifierKeyState；
+              // 它在 2in1 上偶尔会抛，抛进事件分发会把整页打掉，所以全包在 try 里并留痕。
               try {
-                this.sendTap();
-                LinkLog.write('key', 'Ctrl+Enter 发送完成');
+                if (this.enterSends()) {
+                  // PC：Shift+Enter 换行（交给 TextArea 默认行为），其余直接发
+                  if (this.modifierPressed(event, 'Shift')) {
+                    return;
+                  }
+                  this.sendTap();
+                } else if (this.ctrlEnterPressed(event)) {
+                  this.sendTap();
+                }
               } catch (error) {
-                LinkLog.write('key', 'Ctrl+Enter 发送异常：' + errorMessage(error));
+                LinkLog.write('key', '回车发送异常：' + errorMessage(error));
+              }
+            })
+            // PC 上回车直接发：TextArea 的 onKeyEvent 收不到输入法转发的回车，
+            // 得靠 enterKeyType=Send + onSubmit 这条路（手机仍然是回车换行）。
+            .enterKeyType(this.enterSends() ? EnterKeyType.Send : EnterKeyType.NEW_LINE)
+            .onSubmit(() => {
+              if (this.enterSends()) {
+                this.sendTap();
               }
             })
             // 聚焦时整块底提亮（等同于两侧按键被点亮），背景层一定可见
@@ -10479,22 +10508,33 @@ struct Index {
         }
         .width('100%')
         TextArea({ text: this.promptInput,
-          placeholder: this.tr('在这里写长消息，换行不会丢（Ctrl+Enter 发送）') })
+          placeholder: this.tr('在这里写长消息（Enter 发送 · Shift+Enter 换行）') })
           .layoutWeight(1)
           .width('100%')
           .onKeyEvent((event: KeyEvent) => {
             if (event.type !== KeyType.Down || event.keyCode !== KeyCode.KEYCODE_ENTER) {
               return;
             }
-            if (!this.ctrlEnterPressed(event)) {
-              return;
-            }
             try {
+              if (this.enterSends()) {
+                if (this.modifierPressed(event, 'Shift')) {
+                  return;
+                }
+                this.composerExpanded = false;
+                this.sendTap();
+              } else if (this.ctrlEnterPressed(event)) {
+                this.composerExpanded = false;
+                this.sendTap();
+              }
+            } catch (error) {
+              LinkLog.write('key', '回车发送异常（长编辑）：' + errorMessage(error));
+            }
+          })
+          .enterKeyType(this.enterSends() ? EnterKeyType.Send : EnterKeyType.NEW_LINE)
+          .onSubmit(() => {
+            if (this.enterSends()) {
               this.composerExpanded = false;
               this.sendTap();
-              LinkLog.write('key', 'Ctrl+Enter 发送完成（长编辑）');
-            } catch (error) {
-              LinkLog.write('key', 'Ctrl+Enter 发送异常（长编辑）：' + errorMessage(error));
             }
           })
           .backgroundColor(this.pal().inputBg)

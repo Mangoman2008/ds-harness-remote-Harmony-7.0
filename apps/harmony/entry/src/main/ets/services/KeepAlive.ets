@@ -34,6 +34,7 @@ export class KeepAlive {
   private static capsuleOk: boolean = false;
   /** 上一次成功的那档实况窗参数（不同系统版本接受度不一样）。 */
   private static capsuleVariant: number = 0;
+  private static capsuleFailLogAt: number = 0;
 
   /**
    * 鸿蒙手机上那个「灵动岛」= 长时任务通知的实况窗胶囊。
@@ -114,23 +115,27 @@ export class KeepAlive {
     const title: string = lines[KeepAlive.capsuleIndex % lines.length];
     const detail: string = lines.length > 1
       ? lines[(KeepAlive.capsuleIndex + 1) % lines.length] : title;
-    KeepAlive.publishVariant(id, title, detail, KeepAlive.capsuleVariant).catch(() => undefined);
+    KeepAlive.publishVariant(id, title, detail).catch(() => undefined);
   }
 
-  private static async publishVariant(id: number, title: string, detail: string,
-    from: number): Promise<void> {
-    for (let variant = from; variant < 4; variant++) {
+  private static async publishVariant(id: number, title: string, detail: string): Promise<void> {
+    // 由丰富到保守：先要「胶囊标题 + 计时器」，被拒再降级，宁可少点字也别没有胶囊
+    const order: number[] = [2, 1, 0, 3];
+    for (let i = 0; i < order.length; i++) {
+      const variant: number = order[i];
       try {
         await notificationManager.publish(KeepAlive.capsuleRequest(id, title, detail, variant));
-        if (KeepAlive.capsuleVariant !== variant) {
+        if (KeepAlive.capsuleVariant !== variant || !KeepAlive.capsuleOk) {
           KeepAlive.capsuleVariant = variant;
+          KeepAlive.capsuleOk = true;
           LinkLog.write('life', '胶囊生效（档位 ' + variant + '）：' + title);
         }
-        KeepAlive.capsuleOk = true;
         return;
       } catch (error) {
         const code: number = (error as BusinessError).code;
-        if (variant === from) {
+        const now: number = Date.now();
+        if (now - KeepAlive.capsuleFailLogAt > 60000) {
+          KeepAlive.capsuleFailLogAt = now;
           LinkLog.write('life', '胶囊档位 ' + variant + ' 失败 code=' + code);
         }
       }
@@ -189,7 +194,7 @@ export class KeepAlive {
         name: 'downloadTemplate',
         data: {
           title: title,
-          fileName: 'dsh-remote',
+          fileName: detail,
           progressValue: 0
         }
       }

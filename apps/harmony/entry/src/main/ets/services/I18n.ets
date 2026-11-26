@@ -444,7 +444,8 @@ function buildEnglish(): Map<string, string> {
   map.set('列表密度', 'List density');
   map.set('加载中…', 'Loading…');
   map.set('加载更早的消息', 'Load earlier messages');
-  map.set('发送消息…（Enter 换行 · Ctrl+Enter 发送）', 'Send a message… (Enter for newline · Ctrl+Enter to send)');
+  map.set('发送消息…（Enter 发送 · Shift+Enter 换行）', 'Send a message… (Enter to send · Shift+Enter for newline)');
+  map.set('在这里写长消息（Enter 发送 · Shift+Enter 换行）', 'Write a long message here (Enter to send · Shift+Enter for newline)');
   map.set('取消归档', 'Unarchive');
   map.set('取消收藏', 'Remove favorite');
   map.set('取消置顶', 'Unpin');

@@ -2791,7 +2791,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.showServerSwitch = false;
         })
@@ -2933,7 +2933,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.showMoreMenu = false;
         })
@@ -3044,7 +3044,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.showSettings = false;
         })
@@ -4038,7 +4038,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.choiceOpen = false;
         })
@@ -4120,7 +4120,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.deviceMenuId = '';
         })
@@ -5234,8 +5234,8 @@ struct Index {
         .hitTestBehavior(HitTestMode.None)
       }
       Column({ space: this.foldState === 'half' ? this.hingeGapVp() : 0 }) {
-      Row() {
-        // 左侧留出与右侧图标组相同的宽度，中间那列才会落在真正的屏幕中线上
+      Stack({ alignContent: Alignment.Center }) {
+        Row() {
         Row() {
           Text('‹')
             .fontSize(26)
@@ -5251,6 +5251,36 @@ struct Index {
         }
         .width(this.isLandscape ? 80 : 120)
         .justifyContent(FlexAlign.Start)
+          Blank()
+
+        // 三颗图标共用一套尺寸（22 的图形 + 40 的点击区），粗细与视觉重量才对得上
+        this.TopIcon($r('app.media.ic_settings'), () => {
+          if (!this.runtime.modelCatalogLoaded) {
+            this.runtime.refreshModelCatalog();
+          }
+          this.runtime.refreshPermissionState();
+          // 先把键盘收掉，否则会话设置底部（壁纸/连接状态）会被输入法挡住
+          try {
+            this.getUIContext().getFocusController().clearFocus();
+          } catch (error) {
+            logWarn('clear focus failed');
+          }
+          this.showSessionPanel = true;
+        })
+        this.TopIcon($r('app.media.ic_plus'), () => {
+          this.showSessions = false;
+          this.drawerOpen = 0;
+          this.runtime.createNewSession();
+        })
+        if (!this.isLandscape) {
+          this.TopIcon($r('app.media.ic_menu'), () => {
+            this.openDrawer();
+            this.runtime.loadWorkspaces();
+          })
+        }
+        }
+        .width('100%')
+
         Column({ space: 2 }) {
           // 主机名做成可按的胶囊：点一下弹主机列表直接切，不用退回设备页
           Row({ space: 6 }) {
@@ -5260,7 +5290,7 @@ struct Index {
               .fontColor(this.pal().text)
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
-              .constraintSize({ maxWidth: 180 })
+              .constraintSize({ maxWidth: 130 })
             Text(this.tr('切换'))
               .fontSize(this.fs(10))
               .fontColor('#22D3EE')
@@ -5395,33 +5425,9 @@ struct Index {
             }
           }
         }
-        .layoutWeight(1)
+        .constraintSize({ maxWidth: this.windowWidthVp > 0 ? this.windowWidthVp * 0.56 : 200 })
         .alignItems(HorizontalAlign.Center)
-        // 三颗图标共用一套尺寸（22 的图形 + 40 的点击区），粗细与视觉重量才对得上
-        this.TopIcon($r('app.media.ic_settings'), () => {
-          if (!this.runtime.modelCatalogLoaded) {
-            this.runtime.refreshModelCatalog();
-          }
-          this.runtime.refreshPermissionState();
-          // 先把键盘收掉，否则会话设置底部（壁纸/连接状态）会被输入法挡住
-          try {
-            this.getUIContext().getFocusController().clearFocus();
-          } catch (error) {
-            logWarn('clear focus failed');
-          }
-          this.showSessionPanel = true;
-        })
-        this.TopIcon($r('app.media.ic_plus'), () => {
-          this.showSessions = false;
-          this.drawerOpen = 0;
-          this.runtime.createNewSession();
-        })
-        if (!this.isLandscape) {
-          this.TopIcon($r('app.media.ic_menu'), () => {
-            this.openDrawer();
-            this.runtime.loadWorkspaces();
-          })
-        }
+        .clip(true)
       }
       .width('100%')
       .height(56)
@@ -7155,7 +7161,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.showBrowser = false;
         })
@@ -7247,7 +7253,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.showSessionPanel = false;
         })
@@ -7695,7 +7701,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.showModelPicker = false;
         })
@@ -7834,7 +7840,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .opacity(this.drawerOpen)
         .onClick(() => {
           this.closeDrawer();
@@ -8900,7 +8906,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.messageActionsOpen = false;
         })
@@ -8997,7 +9003,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.filePreviewOpen = false;
         })
@@ -9114,7 +9120,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.deviceDetailId = '';
         })
@@ -9890,7 +9896,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.hostSwitcherOpen = false;
         })
@@ -10460,7 +10466,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.workspaceCreateOpen = false;
         })
@@ -10594,7 +10600,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.trajectoryOpen = false;
         })
@@ -10748,7 +10754,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.inSessionSearchOpen = false;
         })
@@ -10855,7 +10861,7 @@ struct Index {
       Column()
         .width('100%')
         .height('100%')
-        .backgroundColor(this.pal().backdrop)
+        .backgroundColor(this.dialogScrim())
         .onClick(() => {
           this.promptPanelOpen = false;
         })
@@ -10963,7 +10969,13 @@ struct Index {
 
   /** 底部弹层的统一底色：半透明 + 背景磨砂，透出后面的会话内容。 */
   private overlayGlass(): string {
-    return this.isDarkUi ? 'rgba(22,28,44,0.78)' : 'rgba(250,252,255,0.86)';
+    // 透一点才看得出是磨砂：弹层背后的会话内容要能隐约透出来
+    return this.isDarkUi ? 'rgba(24,30,46,0.52)' : 'rgba(250,252,255,0.62)';
+  }
+
+  /** 弹层背后的遮罩：比面板更淡，避免整体压成一块黑。 */
+  private dialogScrim(): string {
+    return this.isDarkUi ? 'rgba(4,8,16,0.30)' : 'rgba(20,30,50,0.18)';
   }
 
   /** 输入框聚焦时的一层柔光：左右两端各留一点扩散，视觉上和两侧按键的光连成一条。 */

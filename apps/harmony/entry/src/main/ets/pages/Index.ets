@@ -5430,6 +5430,8 @@ struct Index {
         .constraintSize({ maxWidth: this.windowWidthVp > 0 ? this.windowWidthVp * 0.56 : 200 })
         .alignItems(HorizontalAlign.Center)
         .clip(true)
+        // 这层盖在图标上方，必须透明命中，否则齿轮/加号完全点不到
+        .hitTestBehavior(HitTestMode.Transparent)
       }
       .width('100%')
       .height(56)
@@ -6295,7 +6297,10 @@ struct Index {
                 this.sendTap();
               }
             })
-            .backgroundColor(this.isDarkUi ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.40)')
+            // 聚焦时整块底提亮（等同于两侧按键被点亮），背景层一定可见
+            .backgroundColor(this.inputFocused
+              ? (this.isDarkUi ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.66)')
+              : (this.isDarkUi ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.40)'))
             .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
               colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
               adaptiveColor: AdaptiveColor.DEFAULT,

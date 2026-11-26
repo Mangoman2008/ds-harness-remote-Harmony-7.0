@@ -1,8 +1,10 @@
 import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want, common } from '@kit.AbilityKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { window } from '@kit.ArkUI';
+import { BusinessError } from '@kit.BasicServicesKit';
 import { getAppRuntime } from '../services/AppRuntime';
 import { KeepAlive } from '../services/KeepAlive';
+import { LinkLog } from '../services/LinkLog';
 
 const DOMAIN = 0x0000;
 const BG_DARK = '#070B16';
@@ -39,6 +41,8 @@ export default class EntryAbility extends UIAbility {
     if (params === undefined) {
       return;
     }
+    // 从另一台设备流转过来：want 里带着主机 + 会话，交给运行时去连
+    getAppRuntime().applyHandoff(params);
     const raw: Object | undefined = params['sessionId'];
     if (raw === undefined || raw === null) {
       return;
@@ -48,6 +52,24 @@ export default class EntryAbility extends UIAbility {
       return;
     }
     getAppRuntime().requestOpenSession(sessionId);
+  }
+
+  /**
+   * 源端：系统要流转走时被调用，把「正在哪台主机、哪条会话」塞进 want 参数。
+   * 没有可交的东西就 REJECT，系统那边会显示「无法流转」。
+   */
+  onContinue(wantParam: Record<string, Object>): AbilityConstant.OnContinueResult {
+    const payload: Record<string, Object> | undefined = getAppRuntime().continuePayload();
+    if (payload === undefined) {
+      LinkLog.write('life', '流转：当前没有可交出去的会话，拒绝');
+      return AbilityConstant.OnContinueResult.REJECT;
+    }
+    const keys: string[] = Object.keys(payload);
+    for (const key of keys) {
+      wantParam[key] = payload[key];
+    }
+    LinkLog.write('life', '流转出去：session=' + String(payload['dshSession']).slice(0, 8));
+    return AbilityConstant.OnContinueResult.AGREE;
   }
 
   onDestroy(): void {
@@ -69,8 +91,21 @@ export default class EntryAbility extends UIAbility {
       }
       // Re-assert after content load: some devices drop the pre-load values.
       this.applyWindowTheme();
+      this.markContinuable();
       hilog.info(DOMAIN, 'testTag', 'Succeeded in loading the content.');
     });
+  }
+
+  /** 告诉系统：这个应用可以被流转（任务中心/多设备中心里才会出现入口）。 */
+  private markContinuable(): void {
+    try {
+      this.context.setMissionContinueState(AbilityConstant.ContinueState.ACTIVE)
+        .catch((error: BusinessError) => {
+          hilog.warn(DOMAIN, 'testTag', 'setMissionContinueState failed: %{public}s', JSON.stringify(error));
+        });
+    } catch (err) {
+      hilog.warn(DOMAIN, 'testTag', 'continuation unsupported: %{public}s', JSON.stringify(err));
+    }
   }
 
   /** Immersive layout plus window/bar colors matching the active theme. */

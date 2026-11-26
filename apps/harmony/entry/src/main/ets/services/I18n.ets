@@ -444,6 +444,10 @@ function buildEnglish(): Map<string, string> {
   map.set('列表密度', 'List density');
   map.set('加载中…', 'Loading…');
   map.set('加载更早的消息', 'Load earlier messages');
+  map.set('流转到其他设备', 'Continue on another device');
+  map.set('在系统任务中心点本应用', 'Use the task center on this device');
+  map.set('先连上主机', 'Connect to a host first');
+  map.set('长按系统任务中心里的本应用 → 流转；两台设备需登录同一华为账号', 'In the system task center, long-press this app and choose Continue; both devices must use the same Huawei ID');
   map.set('发送消息…（Enter 发送 · Shift+Enter 换行）', 'Send a message… (Enter to send · Shift+Enter for newline)');
   map.set('在这里写长消息（Enter 发送 · Shift+Enter 换行）', 'Write a long message here (Enter to send · Shift+Enter for newline)');
   map.set('取消归档', 'Unarchive');

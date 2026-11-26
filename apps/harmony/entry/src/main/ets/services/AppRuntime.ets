@@ -5342,6 +5342,123 @@ export class AppRuntime {
     return id;
   }
 
+  /**
+   * —— 跨设备流转（鸿蒙「应用接续」）——
+   * 源端把「现在在哪台主机、哪条会话」摊成 want 参数交出去；
+   * 目标端的 App 被拉起时从 want 里读回来，自动连那台主机并打开那条会话。
+   * 连接本身还是走 Host，不做状态复制——所以两台设备看到的永远是同一份会话。
+   */
+  private handoffSessionId: string = '';
+  private handoffHostId: string = '';
+  private handoffHostName: string = '';
+  private handoffTimer: number = -1;
+  private handoffTries: number = 0;
+
+  /** 源端：当前有没有值得交出去的东西（没连主机 / 没开会话就没有）。 */
+  continueReady(): boolean {
+    return this.currentSessionId.length > 0 && this.connectedDeviceId.length > 0;
+  }
+
+  /** 源端：接续参数。键名固定，两端版本要一致。 */
+  continuePayload(): Record<string, Object> | undefined {
+    if (!this.continueReady()) {
+      return undefined;
+    }
+    const payload: Record<string, Object> = {};
+    payload['dshHost'] = this.connectedDeviceId;
+    payload['dshHostName'] = this.connectedHostDisplayName();
+    payload['dshSession'] = this.currentSessionId;
+    payload['dshTitle'] = this.currentSessionTitle;
+    return payload;
+  }
+
+  /** 目标端：接住流转参数，然后追着把会话接起来。 */
+  applyHandoff(params: Record<string, Object> | undefined): void {
+    if (params === undefined) {
+      return;
+    }
+    const sessionId: string = jsonStr(params, 'dshSession', '');
+    if (sessionId.length === 0) {
+      return;
+    }
+    this.handoffHostId = jsonStr(params, 'dshHost', '');
+    this.handoffHostName = jsonStr(params, 'dshHostName', '');
+    this.handoffSessionId = sessionId;
+    LinkLog.write('life', '流转进来：host=' + this.handoffHostId
+      + ' session=' + sessionId.slice(0, 8) + ' title=' + jsonStr(params, 'dshTitle', ''));
+    this.startHandoffPursuit();
+  }
+
+  private startHandoffPursuit(): void {
+    if (this.handoffSessionId.length === 0 || this.handoffTimer >= 0) {
+      return;
+    }
+    this.handoffTries = 0;
+    this.handoffTimer = setInterval(() => {
+      this.stepHandoff().catch(() => undefined);
+    }, 1500);
+    setTimeout(() => {
+      this.stepHandoff().catch(() => undefined);
+    }, 500);
+  }
+
+  private stopHandoffPursuit(): void {
+    if (this.handoffTimer >= 0) {
+      clearInterval(this.handoffTimer);
+      this.handoffTimer = -1;
+    }
+    this.handoffSessionId = '';
+  }
+
+  /** 每 1.5 秒推进一次：等到设备页或已连上，就把那条会话打开；40 秒不成就放弃并说明。 */
+  private async stepHandoff(): Promise<void> {
+    const sessionId: string = this.handoffSessionId;
+    if (sessionId.length === 0) {
+      this.stopHandoffPursuit();
+      return;
+    }
+    this.handoffTries += 1;
+    if (this.handoffTries > 26) {
+      const hostName: string = this.handoffHostName.length > 0 ? this.handoffHostName : '主机';
+      this.stopHandoffPursuit();
+      this.errorMsg = '流转过来的会话没能接上：' + hostName + ' 不在线，或这台设备还没登录同一账号';
+      this.notify();
+      return;
+    }
+    if (this.phase === PHASE_CHAT) {
+      if (this.currentSessionId === sessionId) {
+        this.stopHandoffPursuit();
+        return;
+      }
+      if (this.handoffHostId.length === 0 || this.connectedDeviceId === this.handoffHostId) {
+        this.requestOpenSession(sessionId);
+        this.stopHandoffPursuit();
+      }
+      return;
+    }
+    if (this.phase !== PHASE_DEVICES) {
+      return;
+    }
+    // 设备页：找到源端那台主机就直连，找不到先刷新列表
+    let target: RemoteHostDevice | undefined = undefined;
+    for (const device of this.devices) {
+      if (device.deviceId === this.handoffHostId) {
+        target = device;
+        break;
+      }
+    }
+    if (target === undefined) {
+      if (this.handoffTries % 4 === 0) {
+        await this.refreshDevices();
+      }
+      return;
+    }
+    LinkLog.write('life', '流转：连上主机 ' + target.deviceId + ' 并打开会话');
+    await this.connectDevice(target.deviceId);
+    this.requestOpenSession(sessionId);
+    this.stopHandoffPursuit();
+  }
+
   /** 所有会话里还没作答的审批/提问总数（界面据此决定要不要刷新等待时长）。 */
   pendingInteractionCount(): number {
     return this.pendingInteractions.size;

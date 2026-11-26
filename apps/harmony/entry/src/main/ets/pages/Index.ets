@@ -3316,6 +3316,13 @@ struct Index {
                   this.runtime.refreshMembership();
                   promptAction.showToast({ message: this.tr('正在刷新会员状态…') });
                 })
+              this.SettingsRow(this.tr('流转到其他设备'),
+                this.runtime.continueReady() ? this.tr('在系统任务中心点本应用') : this.tr('先连上主机'),
+                false, () => {
+                  promptAction.showToast({
+                    message: this.tr('长按系统任务中心里的本应用 → 流转；两台设备需登录同一华为账号')
+                  });
+                })
               if (this.runtime.gitReviewSupported()) {
                 this.SettingsRow(this.tr('Git 审查'),
                   this.gitSummary.length > 0 ? this.gitSummary : this.tr('查看工作区改动'),

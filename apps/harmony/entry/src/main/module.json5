@@ -55,6 +55,7 @@
         "backgroundModes": [
           "dataTransfer"
         ],
+        "continuable": true,
         "exported": true,
         "skills": [
           {

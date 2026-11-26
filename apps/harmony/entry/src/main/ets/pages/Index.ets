@@ -30,8 +30,8 @@ import { PickedImage, captureImage, compressPixelMap, pickImages, pickedImageFro
   from '../services/ImagePicker';
 import { CrossDevice } from '../services/CrossDevice';
 import { CrossDeviceCapture } from '../services/CrossDeviceCapture';
-import { CollaborationServiceFilter, createCollaborationServiceMenuItems, CollaborationServiceStateDialog }
-  from '@kit.ServiceCollaborationKit';
+import { CollaborationServiceFilter, CollaborationDeviceFilterType, createCollaborationServiceMenuItems,
+  CollaborationServiceStateDialog } from '@kit.ServiceCollaborationKit';
 import { MAX_FILE_BYTES, PickedFile, pickFiles } from '../services/FilePicker';
 import { SavedProfile } from '../services/SecureStore';
 import { PromptFilePart, PromptImagePart } from '../net/HarnessClient';
@@ -1171,22 +1171,28 @@ struct Index {
   @Builder
   CollabMenu() {
     Menu() {
-      // 方向有区别：PC 发起时可以点名要手机的「拍照 / 文档扫描 / 相册」；
-      // 手机反向往 PC 要，2in1 侧没有能响应拍照/扫描的相机服务，
-      // 只剩「图片（相册）」这一种能落到 PC 的图库上。
+      // 关键：必须显式给设备类型，默认那套只列手机/平板 ——
+      // 手机上打开时会把 2in1（PC）过滤掉，菜单就剩一条空白条。
       if (isPhoneDevice()) {
         createCollaborationServiceMenuItems([
           CollaborationServiceFilter.IMAGE_PICKER
-        ], 9)
+        ], 9, [
+          CollaborationDeviceFilterType.PC_2IN1,
+          CollaborationDeviceFilterType.PHONE,
+          CollaborationDeviceFilterType.TABLET
+        ])
       } else {
         createCollaborationServiceMenuItems([
           CollaborationServiceFilter.TAKE_PHOTO,
           CollaborationServiceFilter.SCAN_DOCUMENT,
           CollaborationServiceFilter.IMAGE_PICKER
-        ], 9)
+        ], 9, [
+          CollaborationDeviceFilterType.PHONE,
+          CollaborationDeviceFilterType.TABLET,
+          CollaborationDeviceFilterType.PC_2IN1
+        ])
       }
     }
-    .width(280)
   }
 
   /**

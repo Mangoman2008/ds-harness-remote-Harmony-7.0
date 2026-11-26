@@ -42,6 +42,8 @@ const KEY_SECRET_MASK = 'dshremote.secretMask.v1';
 /** 会话壁纸（压缩后的 JPEG base64；不是秘密，只存本地）。 */
 const KEY_WALLPAPER = 'dshremote.wallpaper.v1';
 const KEY_WALLPAPER_DIM = 'dshremote.wallpaperDim.v1';
+/** 应用内 Web 控制台地址（宿主机 dsh web 的局域网地址）。 */
+const KEY_WEB_CONSOLE = 'dshremote.webConsole.v1';
 /** 上次成功连接时的组合指纹（客户端+Host+开关），排查「昨天还好」用。 */
 const KEY_LAST_COMBO = 'dshremote.lastCombo.v1';
 /** 多服务器/多账号：一份「已登录过的服务器」快照列表（含 token），存在 asset store 里。 */
@@ -995,6 +997,18 @@ export class SecureStore {
       this.putSync(KEY_LAST_COMBO, combo);
     } catch (error) {
       logWarn('combo save failed');
+    }
+  }
+
+  loadWebConsoleUrl(): string {
+    return this.getSync(KEY_WEB_CONSOLE, '');
+  }
+
+  saveWebConsoleUrl(url: string): void {
+    try {
+      this.putSync(KEY_WEB_CONSOLE, url);
+    } catch (error) {
+      logWarn('web console url save failed');
     }
   }
 

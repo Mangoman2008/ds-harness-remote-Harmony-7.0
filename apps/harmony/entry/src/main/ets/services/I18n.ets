@@ -444,6 +444,15 @@ function buildEnglish(): Map<string, string> {
   map.set('列表密度', 'List density');
   map.set('加载中…', 'Loading…');
   map.set('加载更早的消息', 'Load earlier messages');
+  map.set('Web 控制台', 'Web console');
+  map.set('打开宿主机网页版', 'Open the host web UI');
+  map.set('填宿主机的局域网地址，App 里直接开网页版 DSH', 'Fill in the host LAN address to open the web DSH inside the app');
+  map.set('宿主机要能被手机访问：用 dsh web --host 你的局域网IP 启动，并在防火墙放行端口', 'The host must accept LAN connections: start it with dsh web --host <your LAN IP> and allow the port through the firewall');
+  map.set('打不开：', 'Cannot open: ');
+  map.set('打开', 'Open');
+  map.set('浏览器打开', 'Open in browser');
+  map.set('拍照失败：', 'Camera failed: ');
+  map.set('没有可用的浏览器', 'No browser available');
   map.set('流转到其他设备', 'Continue on another device');
   map.set('在系统任务中心点本应用', 'Use the task center on this device');
   map.set('先连上主机', 'Connect to a host first');

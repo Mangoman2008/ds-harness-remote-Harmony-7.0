@@ -26,7 +26,7 @@ import {
   Breakpoint, FoldState, breakpointOf, contentColumnWidth, deviceColumns, foldStateOf,
   isCompactWidth, isExpandedWidth, mascotVisible
 } from '../services/Adaptive';
-import { PickedImage, compressPixelMap, pickImages } from '../services/ImagePicker';
+import { PickedImage, captureImage, compressPixelMap, pickImages } from '../services/ImagePicker';
 import { MAX_FILE_BYTES, PickedFile, pickFiles } from '../services/FilePicker';
 import { SavedProfile } from '../services/SecureStore';
 import { PromptFilePart, PromptImagePart } from '../net/HarnessClient';
@@ -396,6 +396,13 @@ struct Index {
   private terminalReady: boolean = false;
   private terminalPending: string[] = [];
   private terminalController: webview.WebviewController = new webview.WebviewController();
+  /** 应用内 Web 控制台：直接开宿主机上的 dsh web（网页版），地址填一次记住。 */
+  @State webConsoleOpen: boolean = false;
+  @State webConsoleSrc: string = '';
+  @State webConsoleInput: string = '';
+  @State webConsoleLoading: boolean = false;
+  @State webConsoleError: string = '';
+  private webConsoleController: webview.WebviewController = new webview.WebviewController();
   private terminalBridge: TerminalBridge = new TerminalBridge();
   /** 主机插件清单浮层。 */
   @State pluginsOpen: boolean = false;
@@ -689,6 +696,24 @@ struct Index {
         uri: url
       };
       context.startAbility(want).catch(() => {
+      });
+    });
+  }
+
+  /** 用系统浏览器打开一个地址（Web 控制台兜底用）。 */
+  private openInBrowser(url: string): void {
+    if (url.length === 0) {
+      return;
+    }
+    const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+    context.openLink(url).catch(() => {
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        entities: ['entity.system.browsable'],
+        uri: url
+      };
+      context.startAbility(want).catch(() => {
+        promptAction.showToast({ message: this.tr('没有可用的浏览器') });
       });
     });
   }
@@ -1100,6 +1125,25 @@ struct Index {
     }).catch((error: Error) => {
       this.pickingImages = false;
       this.errorMsg = this.tr('图片读取失败：') + error.message;
+    });
+  }
+
+  /** 拍照（系统相机；2in1 上由系统决定是否借用附近手机的摄像头）。 */
+  private capturePhoto(): Promise<void> {
+    if (this.pickingImages) {
+      return Promise.resolve();
+    }
+    this.pickingImages = true;
+    const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+    return captureImage(context).then((picked: PickedImage | undefined) => {
+      this.pickingImages = false;
+      if (picked === undefined) {
+        return;
+      }
+      this.pendingImages = this.pendingImages.concat([picked]);
+    }).catch((error: Error) => {
+      this.pickingImages = false;
+      promptAction.showToast({ message: this.tr('拍照失败：') + error.message });
     });
   }
 
@@ -2762,6 +2806,9 @@ struct Index {
       if (this.terminalOpen) {
         this.TerminalOverlay()
       }
+      if (this.webConsoleOpen) {
+        this.WebConsoleOverlay()
+      }
       if (this.diagnosticsOpen) {
         this.DiagnosticsOverlay()
       }
@@ -3341,6 +3388,11 @@ struct Index {
                 this.terminalRunning ? this.tr('运行中') : this.tr('打开会话终端'),
                 false, () => {
                   this.openTerminalOverlay();
+                })
+              this.SettingsRow(this.tr('Web 控制台'),
+                this.runtime.webConsoleUrl.length > 0 ? this.runtime.webConsoleUrl : this.tr('打开宿主机网页版'),
+                false, () => {
+                  this.openWebConsole();
                 })
               this.SettingsRow(this.tr('连接诊断'),
                 this.connectedTransport.length > 0 ? this.transportBadgeText() : this.tr('未连接'), false, () => {
@@ -6279,6 +6331,23 @@ struct Index {
           })
           .onClick(() => {
             this.attachImage();
+          })
+          // 拍照键：走系统相机（鸿蒙 2in1 上可以借附近手机的摄像头，也就是「跨设备拍照」）
+          Row() {
+            Image($r('app.media.ic_camera'))
+              .width(this.fs(18))
+              .height(this.fs(18))
+              .fillColor(this.pal().text2)
+              .objectFit(ImageFit.Contain)
+          }
+          .width(this.compactDock() ? 30 : 34)
+          .height(this.compactDock() ? 40 : 46)
+          .justifyContent(FlexAlign.Center)
+          .alignItems(VerticalAlign.Center)
+          .borderRadius(this.compactDock() ? 20 : 23)
+          .backgroundColor(this.isDarkUi ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.40)')
+          .onClick(() => {
+            this.capturePhoto();
           })
           // 文件键：和图片键同规格，左边再挂一枚
           Row() {
@@ -10228,6 +10297,171 @@ struct Index {
     .width('100%')
     .height('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 18 })
+    .backgroundColor(this.pal().bg)
+  }
+
+  /** 打开 Web 控制台：没配过地址就先给个默认猜测（局域网 + 3080），用户可改。 */
+  private openWebConsole(): void {
+    const saved: string = this.runtime.webConsoleUrl;
+    this.webConsoleInput = saved.length > 0 ? saved : 'http://';
+    this.webConsoleOpen = true;
+    this.webConsoleError = '';
+    if (saved.length > 0) {
+      this.loadWebConsole(saved);
+    } else {
+      this.webConsoleSrc = '';
+    }
+  }
+
+  private loadWebConsole(url: string): void {
+    let normalized: string = url.trim();
+    if (normalized.length === 0) {
+      return;
+    }
+    if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+      normalized = 'http://' + normalized;
+    }
+    this.webConsoleInput = normalized;
+    this.webConsoleSrc = normalized;
+    this.webConsoleError = '';
+    this.webConsoleLoading = true;
+    this.runtime.setWebConsoleUrl(normalized);
+  }
+
+  /** 说明为什么可能打不开：宿主机的 dsh web 默认只听 127.0.0.1。 */
+  private webConsoleHint(): string {
+    return this.tr('宿主机要能被手机访问：用 dsh web --host 你的局域网IP 启动，并在防火墙放行端口');
+  }
+
+  /** 应用内 Web 控制台：内嵌宿主机的 dsh web 页面（网页版），地址可改、可外部打开。 */
+  @Builder
+  WebConsoleOverlay() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Text(this.tr('Web 控制台'))
+          .fontSize(this.fs(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text)
+        Blank()
+        Text(this.tr('刷新'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            if (this.webConsoleSrc.length > 0) {
+              this.webConsoleController.refresh();
+            }
+          })
+        Text(this.tr('浏览器打开'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.openInBrowser(this.webConsoleSrc.length > 0
+              ? this.webConsoleSrc : this.webConsoleInput);
+          })
+        Text(this.tr('收起'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.webConsoleOpen = false;
+            this.webConsoleSrc = '';
+          })
+      }
+      .width('100%')
+
+      Row({ space: 8 }) {
+        TextInput({ text: this.webConsoleInput, placeholder: 'http://192.168.3.2:3080' })
+          .layoutWeight(1)
+          .height(38)
+          .fontSize(this.fs(13))
+          .backgroundColor(this.pal().inputBg)
+          .fontColor(this.pal().text)
+          .placeholderColor(this.pal().text3)
+          .borderRadius(10)
+          .border({ width: 1, color: this.pal().border })
+          .padding({ left: 12, right: 12 })
+          .onChange((value: string) => {
+            this.webConsoleInput = value;
+          })
+          .onSubmit(() => {
+            this.loadWebConsole(this.webConsoleInput);
+          })
+        Text(this.tr('打开'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 14, right: 14, top: 8, bottom: 8 })
+          .borderRadius(10)
+          .backgroundColor(this.isDarkUi ? 'rgba(34,211,238,0.14)' : 'rgba(34,211,238,0.12)')
+          .onClick(() => {
+            this.loadWebConsole(this.webConsoleInput);
+          })
+      }
+      .width('100%')
+
+      if (this.webConsoleSrc.length === 0) {
+        Column({ space: 6 }) {
+          Text(this.tr('填宿主机的局域网地址，App 里直接开网页版 DSH'))
+            .fontSize(this.fs(12))
+            .fontColor(this.pal().text2)
+          Text(this.webConsoleHint())
+            .fontSize(this.fs(11))
+            .fontColor(this.pal().text3)
+        }
+        .width('100%')
+        .padding(12)
+        .backgroundColor(this.pal().card)
+        .borderRadius(10)
+        .alignItems(HorizontalAlign.Start)
+      } else {
+        if (this.webConsoleError.length > 0) {
+          Text(this.webConsoleError)
+            .fontSize(this.fs(11))
+            .fontColor('#F85749')
+            .maxLines(2)
+            .width('100%')
+        }
+        Stack() {
+          Web({ src: this.webConsoleSrc, controller: this.webConsoleController })
+            .javaScriptAccess(true)
+            .domStorageAccess(true)
+            .fileAccess(false)
+            .onPageBegin(() => {
+              this.webConsoleLoading = true;
+              this.webConsoleError = '';
+            })
+            .onPageEnd(() => {
+              this.webConsoleLoading = false;
+            })
+            .onErrorReceive((event: OnErrorReceiveEvent) => {
+              this.webConsoleLoading = false;
+              if (!event.request.isMainFrame) {
+                return;
+              }
+              this.webConsoleError = this.tr('打不开：') + event.error.getErrorInfo()
+                + ' · ' + this.webConsoleHint();
+            })
+            .width('100%')
+            .height('100%')
+            .backgroundColor(this.pal().bg)
+          if (this.webConsoleLoading) {
+            LoadingProgress()
+              .width(28)
+              .height(28)
+              .color('#22D3EE')
+          }
+        }
+        .layoutWeight(1)
+        .width('100%')
+        .borderRadius(12)
+        .clip(true)
+        .border({ width: 1, color: this.pal().border })
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 14, right: 14, top: 14, bottom: 14 })
     .backgroundColor(this.pal().bg)
   }
 

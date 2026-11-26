@@ -674,6 +674,7 @@ export class AppRuntime {
       this.secretMask = this.store.loadSecretMask();
     this.wallpaper = this.store.loadWallpaper();
     this.wallpaperDim = this.store.loadWallpaperDim();
+    this.webConsoleUrl = this.store.loadWebConsoleUrl();
       this.profiles = this.store.loadProfiles();
       this.drafts = this.store.loadDrafts();
       this.prompts = this.store.loadPrompts();
@@ -4811,6 +4812,8 @@ export class AppRuntime {
   }
 
   /** 会话壁纸：压缩后的 JPEG base64，空串表示不使用。 */
+  /** 应用内 Web 控制台地址（宿主机 dsh web 的局域网地址，用户填一次记住）。 */
+  webConsoleUrl: string = '';
   wallpaper: string = '';
 
   /** 壁纸压暗强度：0 淡 / 1 中 / 2 浓。 */
@@ -4819,6 +4822,12 @@ export class AppRuntime {
   setWallpaperDim(level: number): void {
     this.wallpaperDim = level;
     this.store.saveWallpaperDim(level);
+    this.notify();
+  }
+
+  setWebConsoleUrl(url: string): void {
+    this.webConsoleUrl = url;
+    this.store.saveWebConsoleUrl(url);
     this.notify();
   }
 

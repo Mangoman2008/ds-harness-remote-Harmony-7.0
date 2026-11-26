@@ -8,6 +8,8 @@
  */
 
 import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { cameraPicker, camera } from '@kit.CameraKit';
+import { common } from '@kit.AbilityKit';
 import { image } from '@kit.ImageKit';
 import { fileIo as fs } from '@kit.CoreFileKit';
 import { util } from '@kit.ArkTS';
@@ -44,6 +46,32 @@ export async function pickImages(maxCount: number): Promise<PickedImage[]> {
     }
   }
   return out;
+}
+
+/**
+ * 用系统相机拍一张（鸿蒙特性：走的是系统相机，2in1/无摄像头设备上由系统决定
+ * 是否调用附近手机的摄像头，也就是「跨设备拍照」）。
+ * 拍完存进应用沙箱（不往系统相册里塞），再走同一套压缩流程。
+ * 用户取消返回 undefined。
+ */
+export async function captureImage(context: common.Context): Promise<PickedImage | undefined> {
+  const profile: cameraPicker.PickerProfile = new cameraPicker.PickerProfile();
+  profile.cameraPosition = camera.CameraPosition.CAMERA_POSITION_BACK;
+  profile.saveUri = context.filesDir + '/capture-' + Date.now() + '.jpg';
+  const result: cameraPicker.PickerResult =
+    await cameraPicker.pick(context, [cameraPicker.PickerMediaType.PHOTO], profile);
+  if (result.resultCode !== 0 || result.resultUri === undefined || result.resultUri.length === 0) {
+    return undefined;
+  }
+  try {
+    return await loadAndCompress(result.resultUri);
+  } finally {
+    try {
+      fs.unlinkSync(result.resultUri);
+    } catch (error) {
+      // 删不掉就算了，沙箱里多一张临时图不影响使用
+    }
+  }
 }
 
 /** 读本地 URI → 解码 → 等比缩到 MAX_EDGE → JPEG → base64。 */

@@ -1249,19 +1249,10 @@ struct Index {
           .fontColor(this.pal().text3)
           .width('100%')
           .padding({ left: 4, bottom: 2 })
-        this.SettingsRow(this.tr('从相册选'), '', false, () => {
-          this.imageMenuOpen = false;
-          this.attachImage();
-        })
-        this.SettingsRow(this.tr('拍照'), this.pcHasCameraHint(), false, () => {
-          this.imageMenuOpen = false;
-          this.capturePhoto();
-        })
-        // 小窗（悬浮窗/横屏分屏）里行再多也放得下：超出的部分由外层高度封顶挡住
         // 跨设备取图：走系统的「服务协同」（WPS 那条链路）。
         // 手机上系统菜单弹不出来（只闪一个白点），所以只在 PC/平板上显示这一项；
         // 手机要从 PC 拿图，走「PC 把图发到会话 → 手机长按那张图 → 图片加入待发送」。
-        if (!isPhoneDevice()) {
+        if (true) {
           Button() {
             Row({ space: 10 }) {
               Text(this.tr('从其他设备获取'))
@@ -1289,8 +1280,17 @@ struct Index {
           .backgroundColor(this.pal().card)
           .borderRadius(12)
           .border({ width: 1, color: this.pal().border })
-          .bindMenu(this.CollabMenu)
+          .bindMenu(this.CollabMenu, { placement: Placement.Top })
         }
+        this.SettingsRow(this.tr('从相册选'), '', false, () => {
+          this.imageMenuOpen = false;
+          this.attachImage();
+        })
+        this.SettingsRow(this.tr('拍照'), this.pcHasCameraHint(), false, () => {
+          this.imageMenuOpen = false;
+          this.capturePhoto();
+        })
+        // 小窗（悬浮窗/横屏分屏）里行再多也放得下：超出的部分由外层高度封顶挡住
         Text(this.tr('取消'))
           .fontSize(14)
           .fontColor(this.pal().text2)

@@ -313,6 +313,12 @@ struct Index {
   @State hostSwitcherOpen: boolean = false;
   /** Git 审查面板：改动清单 + 单个文件 diff + 勾选回传。 */
   @State gitOpen: boolean = false;
+  /** 输入框是否聚焦：决定那条柔光亮不亮。 */
+  @State inputFocused: boolean = false;
+  /** 桌宠拖动：长按后可拖到任意位置，松手弹回坞上方。 */
+  @State petDragX: number = 0;
+  @State petDragY: number = 0;
+  @State petDragging: boolean = false;
   @State gitLoading: boolean = false;
   @State gitError: string = '';
   @State gitBranch: string = '';
@@ -1824,19 +1830,54 @@ struct Index {
         .onClick(() => {
           this.onPetTap();
         })
-        // 长按桌宠 = 导出诊断文件（现场排障的快捷键，不用翻抽屉找诊断面板）
-        .gesture(LongPressGesture().onAction(() => {
-          const path: string = this.runtime.exportDiagnosticsToFile();
-          promptAction.showToast({ message: path.length > 0
-            ? this.tr('诊断已导出，可 hdc file recv 拉走') + '\n' + path
-            : this.tr('导出失败（存储不可用）') });
-        }))
+        // 长按进入拖动：整个浮层可拖到屏幕任意位置，松手弹回原位
+        .gesture(
+          GestureGroup(GestureMode.Sequence,
+            LongPressGesture({ repeat: false, duration: 350 })
+              .onAction(() => {
+                this.petDragging = true;
+                this.tapHaptic();
+              }),
+            PanGesture({ fingers: 1, distance: 4 })
+              .onActionUpdate((event: GestureEvent) => {
+                if (!this.petDragging) {
+                  return;
+                }
+                this.petDragX = event.offsetX;
+                this.petDragY = event.offsetY;
+              })
+              .onActionEnd(() => {
+                if (!this.petDragging) {
+                  return;
+                }
+                this.petDragging = false;
+                animateTo({ duration: 340, curve: Curve.Friction }, () => {
+                  this.petDragX = 0;
+                  this.petDragY = 0;
+                });
+              })
+              .onActionCancel(() => {
+                if (!this.petDragging) {
+                  return;
+                }
+                this.petDragging = false;
+                animateTo({ duration: 340, curve: Curve.Friction }, () => {
+                  this.petDragX = 0;
+                  this.petDragY = 0;
+                });
+              })
+          )
+        )
       }
       .alignItems(HorizontalAlign.End)
     }
     // 抬到输入坞上方；输入框长高时跟着上移（offset 不参与布局，位置更好控）
     .margin({ right: 14 })
-    .offset({ x: 0, y: -(this.dockHeight + 10) })
+    .offset({ x: this.petDragX, y: -(this.dockHeight + 10) + this.petDragY })
+    // 拖动时轻微放大 + 提高层级，松手回弹由 animateTo 负责
+    .scale(this.petDragging ? { x: 1.08, y: 1.08 } : { x: 1, y: 1 })
+    .animation({ duration: 160, curve: Curve.EaseOut })
+    .zIndex(this.petDragging ? 80 : 0)
     .hitTestBehavior(HitTestMode.Transparent)
     .width('100%')
     .height('100%')
@@ -2866,7 +2907,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 480 })
       .padding({ left: 20, right: 20, top: 18, bottom: 24 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: 1, color: this.pal().border })
       .transition(TransitionEffect.translate({ y: 320 })
@@ -2978,7 +3024,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 420 })
       .padding({ left: 20, right: 20, top: 18, bottom: 26 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: 1, color: this.pal().border })
     }
@@ -3337,7 +3388,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 420 })
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
     }
@@ -4041,7 +4097,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 480 })
       .padding({ left: 20, right: 20, top: 16, bottom: 22 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 300 })
@@ -4136,7 +4197,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 460 })
       .padding({ left: 20, right: 20, top: 16, bottom: 22 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 300 })
@@ -5169,17 +5235,22 @@ struct Index {
       }
       Column({ space: this.foldState === 'half' ? this.hingeGapVp() : 0 }) {
       Row() {
-        Text('‹')
-          .fontSize(26)
-          .fontWeight(FontWeight.Medium)
-          .fontColor(this.pal().text)
-          .width(38)
-          .height(38)
-          .textAlign(TextAlign.Center)
-          .onClick(() => {
-            // 只是回列表，连接保留：同一台主机再进来不重新认证
-            this.runtime.keepAliveToDevices();
-          })
+        // 左侧留出与右侧图标组相同的宽度，中间那列才会落在真正的屏幕中线上
+        Row() {
+          Text('‹')
+            .fontSize(26)
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.pal().text)
+            .width(38)
+            .height(38)
+            .textAlign(TextAlign.Center)
+            .onClick(() => {
+              // 只是回列表，连接保留：同一台主机再进来不重新认证
+              this.runtime.keepAliveToDevices();
+            })
+        }
+        .width(this.isLandscape ? 80 : 120)
+        .justifyContent(FlexAlign.Start)
         Column({ space: 2 }) {
           // 主机名做成可按的胶囊：点一下弹主机列表直接切，不用退回设备页
           Row({ space: 6 }) {
@@ -5807,7 +5878,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 460 })
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 240 })
@@ -5864,7 +5940,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 460 })
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 240 })
@@ -6221,10 +6302,14 @@ struct Index {
             .border({ width: 1,
               color: this.isDarkUi ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.95)' })
             .padding({ left: 18, right: 18, top: 12, bottom: 12 })
-            // 输入框自己也挂一枚光斑：之前只有两侧按键有，看着像「一半有光一半没有」
-            .overlay(this.DockSpot(96), { align: Alignment.Center })
-            .onTouch((event: TouchEvent) => {
-              this.trackDockLight(event);
+            // 输入框的光感：聚焦时整条泛起一层柔光（TextArea 自己吃触摸事件，
+            // 按坐标跟踪的光斑在它上面收不到 Down，所以改成聚焦驱动）
+            .overlay(this.InputGlow(), { align: Alignment.Center })
+            .onFocus(() => {
+              this.inputFocused = true;
+            })
+            .onBlur(() => {
+              this.inputFocused = false;
             })
             .clip(true)
             // 生成中保持可输入：否则「插话」无从谈起。
@@ -7139,7 +7224,12 @@ struct Index {
       }
       .width('100%')
       .constraintSize({ maxHeight: '70%' })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
     }
@@ -7724,7 +7814,12 @@ struct Index {
       }
       .width('100%')
       .constraintSize({ maxHeight: '62%' })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
     }
@@ -8879,7 +8974,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 360 })
       .padding({ left: 14, right: 14, top: 12, bottom: 16 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 300 })
@@ -8994,7 +9094,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 620 })
       .padding({ left: 16, right: 16, top: 14, bottom: 20 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
     }
@@ -9062,7 +9167,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 420 })
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 320 })
@@ -9247,7 +9357,12 @@ struct Index {
       .width('100%')
       .height('66%')
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 340 })
@@ -9326,7 +9441,12 @@ struct Index {
       }
       .width('100%')
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 280 })
@@ -9409,7 +9529,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxHeight: '56%' })
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 320 })
@@ -9843,7 +9968,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 420 })
       .padding({ left: 14, right: 14, top: 12, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
     }
@@ -10212,7 +10342,12 @@ struct Index {
       .width('100%')
       .height('62%')
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 320 })
@@ -10303,7 +10438,12 @@ struct Index {
       .width('100%')
       .height('78%')
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 380 })
@@ -10419,7 +10559,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 420 })
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
       .transition(TransitionEffect.translate({ y: 320 })
@@ -10690,7 +10835,12 @@ struct Index {
       .width('100%')
       .constraintSize({ maxWidth: 420 })
       .padding({ left: 16, right: 16, top: 14, bottom: 18 })
-      .backgroundColor(this.pal().panel)
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
       .borderRadius({ topLeft: 20, topRight: 20 })
       .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
     }
@@ -10809,6 +10959,31 @@ struct Index {
     }
     .width('100%')
     .height('100%')
+  }
+
+  /** 底部弹层的统一底色：半透明 + 背景磨砂，透出后面的会话内容。 */
+  private overlayGlass(): string {
+    return this.isDarkUi ? 'rgba(22,28,44,0.78)' : 'rgba(250,252,255,0.86)';
+  }
+
+  /** 输入框聚焦时的一层柔光：左右两端各留一点扩散，视觉上和两侧按键的光连成一条。 */
+  @Builder
+  InputGlow() {
+    Column()
+      .width('100%')
+      .height('100%')
+      .radialGradient({
+        center: ['50%', '50%'],
+        radius: 150,
+        colors: [
+          ['rgba(255,255,255,0.20)', 0],
+          ['rgba(255,255,255,0.10)', 0.55],
+          ['rgba(255,255,255,0)', 1]
+        ]
+      })
+      .opacity(this.inputFocused ? 1 : 0)
+      .animation({ duration: 220, curve: Curve.EaseOut })
+      .hitTestBehavior(HitTestMode.None)
   }
 
   /** 单块玻璃上的跟手光斑：谁被按就亮谁，坐标就是那一块自己的局部坐标。 */

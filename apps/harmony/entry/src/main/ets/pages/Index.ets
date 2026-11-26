@@ -1242,6 +1242,7 @@ struct Index {
         .onClick(() => {
           this.imageMenuOpen = false;
         })
+      Scroll() {
       Column({ space: 8 }) {
         Text(this.tr('添加图片'))
           .fontSize(this.fs(12))
@@ -1256,6 +1257,7 @@ struct Index {
           this.imageMenuOpen = false;
           this.capturePhoto();
         })
+        // 小窗（悬浮窗/横屏分屏）里行再多也放得下：超出的部分由外层高度封顶挡住
         // 跨设备取图：走系统的「服务协同」（WPS 那条链路）。
         // 手机上系统菜单弹不出来（只闪一个白点），所以只在 PC/平板上显示这一项；
         // 手机要从 PC 拿图，走「PC 把图发到会话 → 手机长按那张图 → 图片加入待发送」。
@@ -1303,8 +1305,19 @@ struct Index {
           })
       }
       .width('100%')
-      .constraintSize({ maxWidth: 520 })
-      .padding({ left: 16, right: 16, top: 14, bottom: 18 })
+      }
+      .scrollBar(BarState.Off)
+      .width('100%')
+      .constraintSize({
+        maxWidth: 520,
+        maxHeight: this.windowHeightVp > 0 ? this.windowHeightVp * 0.72 : 520
+      })
+      .padding({
+        left: this.compactDock() ? 12 : 16,
+        right: this.compactDock() ? 12 : 16,
+        top: 12,
+        bottom: (this.compactDock() ? 12 : 18) + this.bottomSafePadding()
+      })
       .backgroundColor(this.overlayGlass())
       .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
         colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
@@ -9083,7 +9096,9 @@ struct Index {
     this.messageActionSeq = item.seq;
     this.messageActionTime = item.timestamp;
     this.messageActionCode = extractCodeBlocks(item.text);
-    this.messageActionImages = item.images.slice();
+    // 用渲染层那一份（已按「长度+前 64 字符」去重）：item.images 里可能同时有本地预览
+    // 和主机附件两份同一张图，直接拿来当待发送会变成两张。
+    this.messageActionImages = this.messageImages(item);
     this.messageActionsOpen = true;
   }
 

@@ -1470,19 +1470,28 @@ struct Index {
     this.heartbeatExpanded = this.heartbeatExpanded.concat([item.id]);
   }
 
+  /**
+   * 这条消息要显示的图片。
+   *
+   * 本机刚发的图有本地预览（item.images），主机回显时又会带上 attachmentId；
+   * 两边是同一张图但字节不完全相同（本地压过、主机是原图），按字节去重去不掉，
+   * 于是气泡里同图出现两份。规则：有本地预览就只显示本地预览，没有再按 id 补水。
+   */
   private messageImages(item: ChatItem): string[] {
-    const out: string[] = [];
+    const local: string[] = [];
     for (const body of item.images) {
       if (body.length > 0) {
-        out.push(body);
+        local.push(body);
       }
     }
+    if (local.length > 0) {
+      return local;
+    }
+    const out: string[] = [];
     for (const attachmentId of item.imageAttachmentIds) {
       const body: string = this.runtime.imageFor(attachmentId);
       if (body.length > 0) {
-        if (!item.images.includes(body)) {
-          out.push(body);
-        }
+        out.push(body);
       }
     }
     return out;

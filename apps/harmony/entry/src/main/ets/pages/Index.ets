@@ -1173,25 +1173,17 @@ struct Index {
     Menu() {
       // 关键：必须显式给设备类型，默认那套只列手机/平板 ——
       // 手机上打开时会把 2in1（PC）过滤掉，菜单就剩一条空白条。
-      if (isPhoneDevice()) {
-        createCollaborationServiceMenuItems([
-          CollaborationServiceFilter.IMAGE_PICKER
-        ], 9, [
-          CollaborationDeviceFilterType.PC_2IN1,
-          CollaborationDeviceFilterType.PHONE,
-          CollaborationDeviceFilterType.TABLET
-        ])
-      } else {
-        createCollaborationServiceMenuItems([
-          CollaborationServiceFilter.TAKE_PHOTO,
-          CollaborationServiceFilter.SCAN_DOCUMENT,
-          CollaborationServiceFilter.IMAGE_PICKER
-        ], 9, [
-          CollaborationDeviceFilterType.PHONE,
-          CollaborationDeviceFilterType.TABLET,
-          CollaborationDeviceFilterType.PC_2IN1
-        ])
-      }
+      // 三种能力（拍照 / 文档扫描 / 图片）两边都给：PC 也有摄像头，
+      // 对端支不支持由系统面板自己灰掉。
+      createCollaborationServiceMenuItems([
+        CollaborationServiceFilter.TAKE_PHOTO,
+        CollaborationServiceFilter.SCAN_DOCUMENT,
+        CollaborationServiceFilter.IMAGE_PICKER
+      ], 9, [
+        CollaborationDeviceFilterType.PHONE,
+        CollaborationDeviceFilterType.TABLET,
+        CollaborationDeviceFilterType.PC_2IN1
+      ])
     }
   }
 

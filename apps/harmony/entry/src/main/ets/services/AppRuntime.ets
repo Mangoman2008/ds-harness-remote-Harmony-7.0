@@ -12,6 +12,7 @@ import { RemoteClientCore, RemoteClientError } from '../net/RemoteClientCore';
 import { RemoteGateway, RemoteGatewayError, RemoteHostFeatures } from '../net/RemoteGateway';
 import { TerminalAttachment, TerminalDimensions, TerminalInfo, TerminalSession } from '../net/TerminalSession';
 import { HostPluginBundle } from '../net/PluginInventory';
+import { WorkspaceGitDiff, WorkspaceGitFile, WorkspaceGitStatus } from '../net/HarnessClient';
 import { PluginSettingOperation } from '../net/PluginSettings';
 import { BotCatalogRow, parseBotCatalog } from '../net/BotCatalog';
 import { HarnessAlphaClient, HarnessClientFrame, HarnessHistoryEntry, HarnessRemoteSession,
@@ -802,6 +803,30 @@ export class AppRuntime {
     await harness.saveHostPluginSettings(namespace, revision, operations);
   }
 
+  /** 当前主机能不能做 Git 审查（0.6.8+ 且工作区是 git 仓库）。 */
+  gitReviewSupported(): boolean {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    return harness !== undefined && harness.gitReviewSupported();
+  }
+
+  async loadGitStatus(): Promise<WorkspaceGitStatus> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    const sessionId: string = this.currentSessionId;
+    if (harness === undefined || sessionId.length === 0) {
+      throw new Error('还没连上会话');
+    }
+    return await harness.workspaceGitStatus(sessionId);
+  }
+
+  async loadGitDiff(path: string): Promise<WorkspaceGitDiff> {
+    const harness: HarnessAlphaClient | undefined = this.harness;
+    const sessionId: string = this.currentSessionId;
+    if (harness === undefined || sessionId.length === 0) {
+      throw new Error('还没连上会话');
+    }
+    return await harness.workspaceGitDiff(sessionId, path);
+  }
+
   /** 主机插件清单（读一次，界面自己缓存）。 */
   async loadHostPlugins(): Promise<HostPluginBundle[]> {
     const harness: HarnessAlphaClient | undefined = this.harness;
@@ -1086,6 +1111,8 @@ export class AppRuntime {
           this.handleFrame(frame);
         });
       this.harness = harness;
+      // 0.6.8 起主机才会声明 workspace.git.read.v1：据此决定要不要露出「Git 审查」入口
+      harness.setHostCapabilities(features.capabilities);
       this.setConnectStage('订阅会话事件…');
       await harness.start();
       const tHarness: number = Date.now();

@@ -6,6 +6,37 @@ import { HostPluginBundle, readPluginInventory } from './PluginInventory';
 import { parsePluginSettings } from './PluginSettings';
 import { NetTrace } from '../util/NetTrace';
 
+/** 工作区 Git 改动的一项（`workspace.git.status`）。 */
+export class WorkspaceGitFile {
+  path: string = '';
+  /** A/M/D/R/U 这类单字母状态。 */
+  status: string = '';
+  additions: number = 0;
+  deletions: number = 0;
+  binary: boolean = false;
+}
+
+/** 工作区 Git 状态汇总。 */
+export class WorkspaceGitStatus {
+  isGitRepo: boolean = false;
+  branch: string = '';
+  headShortSha: string = '';
+  totalFiles: number = 0;
+  totalAdditions: number = 0;
+  totalDeletions: number = 0;
+  truncated: boolean = false;
+  files: WorkspaceGitFile[] = [];
+}
+
+/** 单个文件的 diff 结果。 */
+export class WorkspaceGitDiff {
+  diff: string = '';
+  isBinary: boolean = false;
+  additions: number = 0;
+  deletions: number = 0;
+  truncated: boolean = false;
+}
+
 /** 目录项（`host/listDirectory`）。 */
 export class DirectoryEntry {
   name: string = '';
@@ -374,6 +405,72 @@ export class HarnessAlphaClient {
       'action': action
     };
     await this.callValue('session/updateQueue', { 'request': request });
+  }
+
+  /** 主机是否声明了 workspace.git.read.v1（0.6.8+ 才有 Git 审查）。 */
+  private supportsWorkspaceGit: boolean = false;
+
+  setHostCapabilities(capabilities: string[]): void {
+    this.supportsWorkspaceGit = capabilities.includes('workspace.git.read.v1');
+  }
+
+  gitReviewSupported(): boolean {
+    return this.supportsWorkspaceGit;
+  }
+
+  /** 工作区改动清单（相对会话工作区根）。 */
+  async workspaceGitStatus(sessionId: string, scope: string = 'all'): Promise<WorkspaceGitStatus> {
+    if (!this.supportsWorkspaceGit) {
+      throw new RemoteGatewayError('FEATURE_NOT_SUPPORTED', '主机不支持 Git 审查（需要 Host 插件 0.6.8+）');
+    }
+    const args: Record<string, Object> = { 'sessionId': sessionId, 'scope': scope };
+    const root: Record<string, Object> | undefined = asRecord(await this.core.rpc('workspace.git.status', args));
+    if (root === undefined) {
+      throw new RemoteGatewayError('INVALID_MESSAGE', '主机返回的 Git 状态不合法');
+    }
+    const result: WorkspaceGitStatus = new WorkspaceGitStatus();
+    result.isGitRepo = root['isGitRepo'] === true;
+    result.branch = jsonStr(root, 'branch', '');
+    result.headShortSha = jsonStr(root, 'headShortSha', '');
+    result.totalFiles = jsonNum(root, 'totalFiles', 0);
+    result.totalAdditions = jsonNum(root, 'totalAdditions', 0);
+    result.totalDeletions = jsonNum(root, 'totalDeletions', 0);
+    result.truncated = root['truncated'] === true;
+    for (const item of asArray(root['files']) ?? []) {
+      const record: Record<string, Object> | undefined = asRecord(item);
+      if (record === undefined) {
+        continue;
+      }
+      const file: WorkspaceGitFile = new WorkspaceGitFile();
+      file.path = jsonStr(record, 'path', '');
+      file.status = jsonStr(record, 'status', '');
+      file.additions = jsonNum(record, 'additions', 0);
+      file.deletions = jsonNum(record, 'deletions', 0);
+      file.binary = record['binary'] === true;
+      if (file.path.length > 0) {
+        result.files.push(file);
+      }
+    }
+    return result;
+  }
+
+  /** 单个文件的 unified diff。 */
+  async workspaceGitDiff(sessionId: string, path: string): Promise<WorkspaceGitDiff> {
+    if (!this.supportsWorkspaceGit) {
+      throw new RemoteGatewayError('FEATURE_NOT_SUPPORTED', '主机不支持 Git 审查（需要 Host 插件 0.6.8+）');
+    }
+    const args: Record<string, Object> = { 'sessionId': sessionId, 'path': path };
+    const root: Record<string, Object> | undefined = asRecord(await this.core.rpc('workspace.git.diff', args));
+    if (root === undefined) {
+      throw new RemoteGatewayError('INVALID_MESSAGE', '主机返回的 diff 不合法');
+    }
+    const result: WorkspaceGitDiff = new WorkspaceGitDiff();
+    result.diff = jsonStr(root, 'diff', '');
+    result.isBinary = root['isBinary'] === true;
+    result.additions = jsonNum(root, 'additions', 0);
+    result.deletions = jsonNum(root, 'deletions', 0);
+    result.truncated = root['truncated'] === true;
+    return result;
   }
 
   /** 主机插件清单（bundles + plugins + settings 合成）。 */

@@ -12,6 +12,7 @@ import { AppRuntime, ChatItem, ChatQuestion, DEFAULT_SERVER_URL, DEFAULT_ACCOUNT
 import { RemoteHostDevice } from '../model/Types';
 import { DirectoryEntry, HarnessWorkspace } from '../net/HarnessClient';
 import { HostPluginBundle, HostPluginRow } from '../net/PluginInventory';
+import { WorkspaceGitDiff, WorkspaceGitFile, WorkspaceGitStatus } from '../net/HarnessClient';
 import { PluginSettingField, PluginSettingsForm } from '../net/PluginSettings';
 import { BotCatalogRow } from '../net/BotCatalog';
 import { HarnessRemoteSession, HarnessSchedule, HarnessScheduleDelivery } from '../net/HarnessClient';
@@ -310,6 +311,17 @@ struct Index {
   @State headerNamePopup: boolean = false;
   /** 顶栏主机名的切换面板。 */
   @State hostSwitcherOpen: boolean = false;
+  /** Git 审查面板：改动清单 + 单个文件 diff + 勾选回传。 */
+  @State gitOpen: boolean = false;
+  @State gitLoading: boolean = false;
+  @State gitError: string = '';
+  @State gitBranch: string = '';
+  @State gitSummary: string = '';
+  @State gitDiffPath: string = '';
+  @State gitDiffText: string = '';
+  @State gitDiffError: string = '';
+  private gitFiles: WorkspaceGitFile[] = [];
+  private gitSelected: string[] = [];
   @State themeMode: number = 0;
   @State languageMode: number = 0;
   @State isDarkUi: boolean = false;
@@ -2641,6 +2653,9 @@ struct Index {
       if (this.botsOpen) {
         this.BotsOverlay()
       }
+      if (this.gitOpen) {
+        this.GitOverlay()
+      }
       if (this.hostSwitcherOpen) {
         this.HostSwitcherOverlay()
       }
@@ -3194,6 +3209,13 @@ struct Index {
                   this.runtime.refreshMembership();
                   promptAction.showToast({ message: this.tr('正在刷新会员状态…') });
                 })
+              if (this.runtime.gitReviewSupported()) {
+                this.SettingsRow(this.tr('Git 审查'),
+                  this.gitSummary.length > 0 ? this.gitSummary : this.tr('查看工作区改动'),
+                  false, () => {
+                    this.openGitOverlay();
+                  })
+              }
               this.SettingsRow(this.tr('插件管理'),
                 this.hostPlugins.length > 0
                   ? ('' + this.hostPlugins.length + ' ' + this.tr('个插件包'))
@@ -3428,6 +3450,72 @@ struct Index {
       logWarn('home mascot pick failed: ' + errorMessage(error));
       promptAction.showToast({ message: this.tr('选图失败，换一张试试') });
     }
+  }
+
+  /** 打开 Git 审查：拉一次工作区改动清单。 */
+  private openGitOverlay(): void {
+    this.gitOpen = true;
+    this.gitLoading = true;
+    this.gitError = '';
+    this.gitDiffPath = '';
+    this.gitDiffText = '';
+    this.gitSelected = [];
+    this.runtime.loadGitStatus().then((status: WorkspaceGitStatus) => {
+      this.gitFiles = status.files;
+      this.gitBranch = status.branch;
+      this.gitSummary = (status.branch.length > 0 ? status.branch + ' · ' : '')
+        + status.totalFiles + this.tr(' 个文件 · +') + status.totalAdditions + ' −' + status.totalDeletions;
+      this.gitLoading = false;
+    }).catch((error: Error) => {
+      this.gitLoading = false;
+      this.gitError = errorMessage(error);
+      this.gitSummary = '';
+    });
+  }
+
+  private openGitDiff(path: string): void {
+    this.gitDiffPath = path;
+    this.gitDiffText = '';
+    this.gitDiffError = '';
+    this.runtime.loadGitDiff(path).then((diff: WorkspaceGitDiff) => {
+      this.gitDiffText = diff.isBinary ? this.tr('二进制文件，没有文本 diff') : diff.diff;
+      if (this.gitDiffText.length === 0) {
+        this.gitDiffText = this.tr('没有差异内容');
+      }
+    }).catch((error: Error) => {
+      this.gitDiffError = errorMessage(error);
+    });
+  }
+
+  private toggleGitFile(path: string): void {
+    const next: string[] = [];
+    let removed: boolean = false;
+    for (const item of this.gitSelected) {
+      if (item === path) {
+        removed = true;
+      } else {
+        next.push(item);
+      }
+    }
+    if (!removed) {
+      next.push(path);
+    }
+    this.gitSelected = next;
+  }
+
+  /** 把勾选的文件作为一条消息回传，让 agent 针对这些改动继续处理。 */
+  private sendGitSelection(): void {
+    if (this.gitSelected.length === 0) {
+      promptAction.showToast({ message: this.tr('先勾选要处理的文件') });
+      return;
+    }
+    const lines: string[] = [];
+    lines.push(this.tr('请针对下面这些工作区改动继续修改：'));
+    for (const path of this.gitSelected) {
+      lines.push('- ' + path);
+    }
+    this.gitOpen = false;
+    this.runtime.sendPrompt(lines.join(String.fromCharCode(10)));
   }
 
   /** 打开 DS-Bot 目录：主机没装时给出明确提示。 */
@@ -9514,6 +9602,154 @@ struct Index {
         .layoutWeight(1)
         .width('100%')
         .scrollBar(BarState.Off)
+      }
+    }
+    .width('100%')
+    .height('100%')
+    .padding({ left: 14, right: 14, top: 14, bottom: 18 })
+    .backgroundColor(this.pal().bg)
+  }
+
+  /** Git 审查：左边改动清单（可勾选），右边/下方看单个文件 diff。 */
+  @Builder
+  GitOverlay() {
+    Column({ space: 10 }) {
+      Row({ space: 10 }) {
+        Text(this.tr('Git 审查'))
+          .fontSize(this.fs(16))
+          .fontWeight(FontWeight.Medium)
+          .fontColor(this.pal().text)
+        if (this.gitBranch.length > 0) {
+          Text(this.gitBranch)
+            .fontSize(this.fs(10))
+            .fontColor(this.pal().text3)
+        }
+        Blank()
+        Text(this.tr('刷新'))
+          .fontSize(this.fs(12))
+          .fontColor('#22D3EE')
+          .onClick(() => {
+            this.openGitOverlay();
+          })
+        Text(this.tr('收起'))
+          .fontSize(this.fs(13))
+          .fontColor('#22D3EE')
+          .padding({ left: 8 })
+          .onClick(() => {
+            this.gitOpen = false;
+          })
+      }
+      .width('100%')
+
+      if (this.gitLoading) {
+        Row({ space: 8 }) {
+          LoadingProgress().width(16).height(16).color('#22D3EE')
+          Text(this.tr('读取工作区改动…')).fontSize(this.fs(12)).fontColor(this.pal().text3)
+        }
+      } else if (this.gitError.length > 0) {
+        Text(this.gitError)
+          .fontSize(this.fs(12))
+          .fontColor('#F5A623')
+          .width('100%')
+      } else if (this.gitFiles.length === 0) {
+        Text(this.tr('工作区没有未提交的改动'))
+          .fontSize(this.fs(12))
+          .fontColor(this.pal().text3)
+      } else {
+        Row({ space: 8 }) {
+          Text(this.gitSummary)
+            .fontSize(this.fs(11))
+            .fontColor(this.pal().text3)
+            .layoutWeight(1)
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.gitSelected.length > 0) {
+            Text(this.tr('回传') + ' ' + this.gitSelected.length)
+              .fontSize(this.fs(11))
+              .fontColor('#22D3EE')
+              .padding({ left: 8, right: 8, top: 3, bottom: 3 })
+              .backgroundColor('rgba(34,211,238,0.12)')
+              .borderRadius(8)
+              .onClick(() => {
+                this.sendGitSelection();
+              })
+          }
+        }
+        .width('100%')
+
+        List({ space: 6 }) {
+          ForEach(this.gitFiles, (file: WorkspaceGitFile) => {
+            ListItem() {
+              Row({ space: 8 }) {
+                Text(this.gitSelected.includes(file.path) ? '☑' : '☐')
+                  .fontSize(this.fs(12))
+                  .fontColor(this.gitSelected.includes(file.path) ? '#22D3EE' : this.pal().text3)
+                  .onClick(() => {
+                    this.toggleGitFile(file.path);
+                  })
+                Text(file.status.length > 0 ? file.status : 'M')
+                  .fontSize(this.fs(10))
+                  .fontColor(file.status === 'D' ? '#F85749' : (file.status === 'A' ? '#34D399' : '#F0A020'))
+                  .width(14)
+                Text(file.path)
+                  .fontSize(this.fs(12))
+                  .fontColor(this.pal().text2)
+                  .maxLines(1)
+                  .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  .layoutWeight(1)
+                  .onClick(() => {
+                    this.openGitDiff(file.path);
+                  })
+                Text('+' + file.additions + ' −' + file.deletions)
+                  .fontSize(this.fs(10))
+                  .fontColor(this.pal().text3)
+              }
+              .width('100%')
+              .padding({ left: 8, right: 8, top: 7, bottom: 7 })
+              .backgroundColor(this.gitDiffPath === file.path ? this.pal().inputBg : this.pal().card)
+              .borderRadius(8)
+              .border({ width: 1, color: this.gitDiffPath === file.path
+                ? 'rgba(34,211,238,0.45)' : this.pal().border })
+              .onClick(() => {
+                this.openGitDiff(file.path);
+              })
+            }
+          }, (file: WorkspaceGitFile) => 'git:' + file.path + ':' + file.status
+            + ':' + this.gitSelected.includes(file.path))
+        }
+        .constraintSize({ maxHeight: this.windowHeightVp > 0 ? this.windowHeightVp * 0.32 : 240 })
+        .width('100%')
+        .scrollBar(BarState.Off)
+
+        if (this.gitDiffPath.length > 0) {
+          Text(this.gitDiffPath)
+            .fontSize(this.fs(10))
+            .fontColor(this.pal().text3)
+            .width('100%')
+            .maxLines(1)
+            .textOverflow({ overflow: TextOverflow.Ellipsis })
+          if (this.gitDiffError.length > 0) {
+            Text(this.gitDiffError)
+              .fontSize(this.fs(11))
+              .fontColor('#F85749')
+          } else {
+            Scroll() {
+              Text(this.gitDiffText)
+                .fontSize(this.fs(10))
+                .fontFamily('monospace')
+                .fontColor(this.pal().text2)
+                .width('100%')
+                .textAlign(TextAlign.Start)
+                .copyOption(CopyOptions.LocalDevice)
+            }
+            .layoutWeight(1)
+            .width('100%')
+            .align(Alignment.TopStart)
+            .backgroundColor(this.pal().inputBg)
+            .borderRadius(8)
+            .padding(8)
+          }
+        }
       }
     }
     .width('100%')

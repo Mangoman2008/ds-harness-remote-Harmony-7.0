@@ -248,6 +248,16 @@ function buildEnglish(): Map<string, string> {
     'Saved sign-ins — tap one to switch, no password needed');
   map.set('切换', 'Switch');
   map.set('当前', 'Current');
+  map.set('Git 审查', 'Git review');
+  map.set('查看工作区改动', 'Review workspace changes');
+  map.set(' 个文件 · +', ' files · +');
+  map.set('工作区没有未提交的改动', 'No uncommitted changes');
+  map.set('读取工作区改动…', 'Reading workspace changes…');
+  map.set('二进制文件，没有文本 diff', 'Binary file — no text diff');
+  map.set('没有差异内容', 'No diff content');
+  map.set('先勾选要处理的文件', 'Select files first');
+  map.set('回传', 'Send');
+  map.set('请针对下面这些工作区改动继续修改：', 'Please continue working on these workspace changes:');
   map.set('更换', 'Change');
   map.set('推理等级', 'Reasoning');
   map.set('正在读取模型目录…', 'Loading model catalog…');

@@ -1508,15 +1508,26 @@ struct Index {
         local.push(body);
       }
     }
-    if (local.length > 0) {
-      return local;
-    }
     const out: string[] = [];
-    for (const attachmentId of item.imageAttachmentIds) {
-      const body: string = this.runtime.imageFor(attachmentId);
-      if (body.length > 0) {
-        out.push(body);
+    const seen: Set<string> = new Set<string>();
+    const push = (body: string): void => {
+      if (body.length === 0) {
+        return;
       }
+      // 同一张图可能既在本地预览里、又在主机附件里（字节未必相同），
+      // 用「长度 + 前 64 字符」当签名兜底，保证一个气泡里同一张图只画一次。
+      const signature: string = body.length + ':' + body.substring(0, 64);
+      if (seen.has(signature)) {
+        return;
+      }
+      seen.add(signature);
+      out.push(body);
+    };
+    for (const body of local) {
+      push(body);
+    }
+    for (const attachmentId of item.imageAttachmentIds) {
+      push(this.runtime.imageFor(attachmentId));
     }
     return out;
   }
@@ -7170,7 +7181,12 @@ struct Index {
     .width(300)
     .padding({ left: 14, right: 14, top: 16, bottom: 16 })
     .margin({ right: 8, top: 8, bottom: 8 })
-    .backgroundColor(this.pal().panel)
+    .backgroundColor(this.overlayGlass())
+    .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+      colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+      adaptiveColor: AdaptiveColor.DEFAULT,
+      blurOptions: { grayscale: [0, 12] }
+    })
     .borderRadius(18)
     .border({ width: 1, color: this.pal().border })
     .alignItems(HorizontalAlign.Start)

@@ -1186,6 +1186,7 @@ struct Index {
         ], 9)
       }
     }
+    .width(280)
   }
 
   /**

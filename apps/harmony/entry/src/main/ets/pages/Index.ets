@@ -1856,10 +1856,7 @@ struct Index {
               }
               this.petArmed = false;
               this.petDragging = false;
-              animateTo({ duration: 340, curve: Curve.Friction }, () => {
-                this.petDragX = 0;
-                this.petDragY = 0;
-              });
+              this.returnPetWithRandomPath();
             })
             .onActionCancel(() => {
               if (!this.petArmed) {
@@ -1867,10 +1864,7 @@ struct Index {
               }
               this.petArmed = false;
               this.petDragging = false;
-              animateTo({ duration: 340, curve: Curve.Friction }, () => {
-                this.petDragX = 0;
-                this.petDragY = 0;
-              });
+              this.returnPetWithRandomPath();
             })
         ))
       }
@@ -1880,7 +1874,10 @@ struct Index {
     .margin({ right: 14 })
     .offset({ x: this.petDragX, y: -(this.dockHeight + 10) + this.petDragY })
     // 拖动时轻微放大 + 提高层级，松手回弹由 animateTo 负责
-    .scale(this.petDragging ? { x: 1.06, y: 1.06 } : { x: 1, y: 1 })
+    // 锚点放右下角：放大时朝左上「鼓」，宠物不会被推出屏幕
+    .scale({ x: this.petDragging ? 2 : 1, y: this.petDragging ? 2 : 1,
+      centerX: '100%', centerY: '100%' })
+    .animation({ duration: 220, curve: Curve.EaseOut })
     .animation({ duration: 160, curve: Curve.EaseOut })
     .zIndex(this.petDragging ? 80 : 0)
     .hitTestBehavior(HitTestMode.Transparent)
@@ -3819,6 +3816,23 @@ struct Index {
   }
 
   /** 单击/双击的统一入口：320ms 内第二下算双击（炸屏），否则延时 320ms 说俏皮话。 */
+  /** 松手回位：先随机折到一个中间点再回原位，总时长约 680ms（原来 340ms 太快）。 */
+  private returnPetWithRandomPath(): void {
+    const scatter: number = 60;
+    const midX: number = this.petDragX * 0.35 + (Math.random() - 0.5) * scatter;
+    const midY: number = this.petDragY * 0.35 + (Math.random() - 0.5) * scatter;
+    animateTo({ duration: 280, curve: Curve.EaseOut }, () => {
+      this.petDragX = midX;
+      this.petDragY = midY;
+    });
+    setTimeout(() => {
+      animateTo({ duration: 400, curve: Curve.Friction }, () => {
+        this.petDragX = 0;
+        this.petDragY = 0;
+      });
+    }, 280);
+  }
+
   private onPetTap(): void {
     const now: number = Date.now();
     if (now - this.petLastTap < 320) {

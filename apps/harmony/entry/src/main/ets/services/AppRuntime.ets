@@ -6004,7 +6004,9 @@ function addUserMessage(items: ChatItem[], data: Record<string, Object>, time: n
   }
   // 主机回显偶尔不带 rpcId（带附件的消息尤其如此）：按文本 + 时间兜底认领本地那条，
   // 否则同一句话会在聊天里出现两个气泡，看起来像「发了两份」。
-  if (rpcId.length === 0) {
+  // 回显既可能不带 rpcId，也可能带的是另一个 id：两种情况都按「同文本 + 60 秒内」
+  // 认领本地那条乐观气泡，避免同一句出现两个气泡（发图片/文件时最容易撞上）。
+  {
     for (let i = next.length - 1; i >= 0; i--) {
       const candidate: ChatItem = next[i];
       if (candidate.kind !== 'user' || candidate.seq > 0 || candidate.id.indexOf('local:') !== 0) {

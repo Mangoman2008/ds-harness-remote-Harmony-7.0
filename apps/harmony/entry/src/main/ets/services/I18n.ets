@@ -323,6 +323,10 @@ function buildEnglish(): Map<string, string> {
   map.set('排队中 · 等当前回合结束', 'Queued · waits for the running turn');
   map.set('插队', 'Jump queue');
   map.set('撤回', 'Withdraw');
+  map.set('切换', 'Switch');
+  map.set('切换主机', 'Switch Host');
+  map.set('当前', 'Current');
+  map.set('还没有主机，先回上一页刷新', 'No hosts yet — refresh on the previous page');
   map.set('全屏', 'Full screen');
   map.set('还原', 'Restore');
   map.set('排队中', 'Queued');

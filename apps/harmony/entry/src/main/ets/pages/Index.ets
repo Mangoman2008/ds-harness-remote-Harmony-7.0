@@ -308,6 +308,8 @@ struct Index {
   @State accountServer: string = '';
   @State namePreviewId: string = '';
   @State headerNamePopup: boolean = false;
+  /** 顶栏主机名的切换面板。 */
+  @State hostSwitcherOpen: boolean = false;
   @State themeMode: number = 0;
   @State languageMode: number = 0;
   @State isDarkUi: boolean = false;
@@ -2638,6 +2640,9 @@ struct Index {
       }
       if (this.botsOpen) {
         this.BotsOverlay()
+      }
+      if (this.hostSwitcherOpen) {
+        this.HostSwitcherOverlay()
       }
       if (this.pluginsOpen) {
         this.PluginsOverlay()
@@ -5085,29 +5090,27 @@ struct Index {
             this.runtime.keepAliveToDevices();
           })
         Column({ space: 2 }) {
-          Text(this.connectedHostDisplay())
-            .fontSize(17)
-            .fontWeight(FontWeight.Medium)
-            .fontColor(this.pal().text)
-            .maxLines(1)
-            .textOverflow({ overflow: TextOverflow.Ellipsis })
-            .onHover((isHover: boolean) => {
-              this.headerNamePopup = isHover && this.connectedHostDisplay().length > 12;
-            })
-            .gesture(LongPressGesture()
-              .onAction(() => {
-                this.headerNamePopup = true;
-              }))
-            .bindPopup(this.headerNamePopup, {
-              message: this.connectedHostDisplay(),
-              placement: Placement.Bottom,
-              autoCancel: true,
-              onStateChange: (state: PopupStateChangeParam) => {
-                if (!state.isVisible) {
-                  this.headerNamePopup = false;
-                }
-              }
-            })
+          // 主机名做成可按的胶囊：点一下弹主机列表直接切，不用退回设备页
+          Row({ space: 6 }) {
+            Text(this.connectedHostDisplay())
+              .fontSize(15)
+              .fontWeight(FontWeight.Medium)
+              .fontColor(this.pal().text)
+              .maxLines(1)
+              .textOverflow({ overflow: TextOverflow.Ellipsis })
+              .constraintSize({ maxWidth: 180 })
+            Text(this.tr('切换'))
+              .fontSize(this.fs(10))
+              .fontColor('#22D3EE')
+          }
+          .padding({ left: 10, right: 10, top: 4, bottom: 4 })
+          .backgroundColor(this.pal().chip)
+          .borderRadius(10)
+          .border({ width: 1, color: this.pal().border })
+          .onClick(() => {
+            this.runtime.refreshDevices().catch(() => undefined);
+            this.hostSwitcherOpen = true;
+          })
           Row({ space: 5 }) {
             Column()
               .width(5)
@@ -9482,6 +9485,99 @@ struct Index {
     .height('100%')
     .padding({ left: 14, right: 14, top: 14, bottom: 18 })
     .backgroundColor(this.pal().bg)
+  }
+
+  /** 顶栏主机名点开的主机切换面板：直接连另一台，不用退回设备页。 */
+  @Builder
+  HostSwitcherOverlay() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.pal().backdrop)
+        .onClick(() => {
+          this.hostSwitcherOpen = false;
+        })
+      Column({ space: 8 }) {
+        Row({ space: 10 }) {
+          Text(this.tr('切换主机'))
+            .fontSize(this.fs(15))
+            .fontWeight(FontWeight.Medium)
+            .fontColor(this.pal().text)
+          Blank()
+          Text(this.tr('收起'))
+            .fontSize(this.fs(12))
+            .fontColor('#22D3EE')
+            .onClick(() => {
+              this.hostSwitcherOpen = false;
+            })
+        }
+        .width('100%')
+        if (this.runtime.devices.length === 0) {
+          Text(this.tr('还没有主机，先回上一页刷新'))
+            .fontSize(this.fs(12))
+            .fontColor(this.pal().text3)
+            .width('100%')
+            .padding({ top: 10, bottom: 10 })
+        } else {
+          List({ space: 8 }) {
+            ForEach(this.runtime.devices, (device: RemoteHostDevice) => {
+              ListItem() {
+                Row({ space: 10 }) {
+                  Column()
+                    .width(6)
+                    .height(6)
+                    .borderRadius(3)
+                    .backgroundColor(device.online ? '#34D399' : this.pal().text3)
+                  Column({ space: 2 }) {
+                    Text(this.displayNameFor(device).length > 0 ? this.displayNameFor(device) : device.deviceId)
+                      .fontSize(this.fs(13))
+                      .fontColor(this.pal().text)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                    Text(this.hostSubtitle(device))
+                      .fontSize(this.fs(10))
+                      .fontColor(this.pal().text3)
+                      .maxLines(1)
+                      .textOverflow({ overflow: TextOverflow.Ellipsis })
+                  }
+                  .alignItems(HorizontalAlign.Start)
+                  .layoutWeight(1)
+                  if (device.deviceId === this.runtime.connectedDeviceId) {
+                    Text(this.tr('当前'))
+                      .fontSize(this.fs(10))
+                      .fontColor('#22D3EE')
+                  }
+                }
+                .width('100%')
+                .padding(10)
+                .backgroundColor(this.pal().card)
+                .borderRadius(10)
+                .border({ width: 1, color: device.deviceId === this.runtime.connectedDeviceId
+                  ? 'rgba(34,211,238,0.45)' : this.pal().border })
+                .onClick(() => {
+                  this.hostSwitcherOpen = false;
+                  if (device.deviceId !== this.runtime.connectedDeviceId) {
+                    this.runtime.connectDevice(device.deviceId).catch(() => undefined);
+                  }
+                })
+              }
+            }, (device: RemoteHostDevice) => 'switch:' + device.deviceId + ':' + device.online)
+          }
+          .constraintSize({ maxHeight: this.windowHeightVp > 0 ? this.windowHeightVp * 0.5 : 360 })
+          .width('100%')
+          .scrollBar(BarState.Off)
+        }
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 420 })
+      .padding({ left: 14, right: 14, top: 12, bottom: 18 })
+      .backgroundColor(this.pal().panel)
+      .borderRadius({ topLeft: 20, topRight: 20 })
+      .border({ width: { top: 0.5 }, color: this.pal().borderStrong })
+    }
+    .width('100%')
+    .height('100%')
   }
 
   /** 插件管理：列出主机插件包与其中的插件，可启停（写操作交给宿主裁决）。 */

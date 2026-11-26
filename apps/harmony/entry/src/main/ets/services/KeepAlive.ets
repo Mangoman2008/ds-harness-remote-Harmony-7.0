@@ -35,6 +35,10 @@ export class KeepAlive {
   /** 上一次成功的那档实况窗参数（不同系统版本接受度不一样）。 */
   private static capsuleVariant: number = 0;
   private static capsuleFailLogAt: number = 0;
+  /** 临时插播一段（完成 / 需要确认）：期间胶囊固定显示这两行并带底色。 */
+  private static overrideLines: string[] = [];
+  private static overrideColor: string = '';
+  private static overrideUntil: number = 0;
 
   /**
    * 鸿蒙手机上那个「灵动岛」= 长时任务通知的实况窗胶囊。
@@ -58,6 +62,35 @@ export class KeepAlive {
     KeepAlive.capsuleProvider = provider;
     KeepAlive.refreshCapsuleLines();
     if (KeepAlive.capsuleOk) {
+      KeepAlive.publishCapsule();
+    }
+  }
+
+  /**
+   * 插播：让胶囊立刻显示这两行（第一行主文、第二行副文）并染色，
+   * holdMs 传 0 表示「一直挂着，等我 clear」（需要确认就是这种）。
+   */
+  static pulseCapsule(lines: string[], color: string, holdMs: number): void {
+    if (lines.length === 0) {
+      return;
+    }
+    KeepAlive.overrideLines = lines;
+    KeepAlive.overrideColor = color;
+    KeepAlive.overrideUntil = holdMs > 0 ? Date.now() + holdMs : 0;
+    if (KeepAlive.capsuleId > 0) {
+      KeepAlive.publishCapsule();
+    }
+  }
+
+  /** 撤掉插播，回到常规轮播。 */
+  static clearCapsulePulse(): void {
+    if (KeepAlive.overrideLines.length === 0) {
+      return;
+    }
+    KeepAlive.overrideLines = [];
+    KeepAlive.overrideColor = '';
+    KeepAlive.overrideUntil = 0;
+    if (KeepAlive.capsuleId > 0) {
       KeepAlive.publishCapsule();
     }
   }
@@ -108,23 +141,38 @@ export class KeepAlive {
    */
   private static publishCapsule(): void {
     const id: number = KeepAlive.capsuleId;
-    if (id <= 0 || KeepAlive.capsuleLines.length === 0) {
+    if (id <= 0
+      || (KeepAlive.capsuleLines.length === 0 && KeepAlive.overrideLines.length === 0)) {
       return;
     }
-    const lines: string[] = KeepAlive.capsuleLines;
-    const title: string = lines[KeepAlive.capsuleIndex % lines.length];
-    const detail: string = lines.length > 1
-      ? lines[(KeepAlive.capsuleIndex + 1) % lines.length] : title;
-    KeepAlive.publishVariant(id, title, detail).catch(() => undefined);
+    const pulsing: boolean = KeepAlive.overrideLines.length > 0
+      && (KeepAlive.overrideUntil === 0 || Date.now() < KeepAlive.overrideUntil);
+    if (!pulsing && KeepAlive.overrideLines.length > 0) {
+      // 时间到了：撤掉插播，回到常规轮播
+      KeepAlive.overrideLines = [];
+      KeepAlive.overrideColor = '';
+      KeepAlive.overrideUntil = 0;
+    }
+    const lines: string[] = pulsing ? KeepAlive.overrideLines : KeepAlive.capsuleLines;
+    if (lines.length === 0) {
+      return;
+    }
+    const title: string = pulsing ? lines[0] : lines[KeepAlive.capsuleIndex % lines.length];
+    const detail: string = pulsing
+      ? (lines.length > 1 ? lines[1] : '')
+      : (lines.length > 1 ? lines[(KeepAlive.capsuleIndex + 1) % lines.length] : title);
+    KeepAlive.publishVariant(id, title, detail,
+      pulsing ? KeepAlive.overrideColor : '').catch(() => undefined);
   }
 
-  private static async publishVariant(id: number, title: string, detail: string): Promise<void> {
+  private static async publishVariant(id: number, title: string, detail: string,
+    color: string): Promise<void> {
     // 由丰富到保守：先要「胶囊标题 + 计时器」，被拒再降级，宁可少点字也别没有胶囊
     const order: number[] = [2, 1, 0, 3];
     for (let i = 0; i < order.length; i++) {
       const variant: number = order[i];
       try {
-        await notificationManager.publish(KeepAlive.capsuleRequest(id, title, detail, variant));
+        await notificationManager.publish(KeepAlive.capsuleRequest(id, title, detail, variant, color));
         if (KeepAlive.capsuleVariant !== variant || !KeepAlive.capsuleOk) {
           KeepAlive.capsuleVariant = variant;
           KeepAlive.capsuleOk = true;
@@ -153,7 +201,7 @@ export class KeepAlive {
    * 档位 3：纯文本长时通知（兜底，至少通知栏能看到进度文案）
    */
   private static capsuleRequest(id: number, title: string, detail: string,
-    variant: number): notificationManager.NotificationRequest {
+    variant: number, color: string): notificationManager.NotificationRequest {
     if (variant >= 3) {
       const fallback: notificationManager.NotificationRequest = {
         id: id,
@@ -173,7 +221,9 @@ export class KeepAlive {
       text: detail
     };
     if (variant >= 1) {
-      live.capsule = { title: title };
+      live.capsule = color.length > 0
+        ? { title: title, backgroundColor: color }
+        : { title: title };
     }
     if (variant >= 2) {
       live.time = {

@@ -5304,6 +5304,11 @@ export class AppRuntime {
     pending.frame = frame;
     pending.at = Date.now();
     this.pendingInteractions.set(key, pending);
+    // 实况窗插播「需要确认」：一直挂着，直到答完（比轮播有用得多）
+    KeepAlive.pulseCapsule([
+      '需要确认 · ' + this.pendingInteractions.size,
+      this.currentSessionTitle.length > 0 ? this.currentSessionTitle : 'DSH 远程'
+    ], '#F5B93F', 0);
   }
 
   private forgetInteraction(key: string): void {
@@ -5315,6 +5320,12 @@ export class AppRuntime {
     this.notifiedInteractions.delete(key);
     if (this.pendingInteractions.size === 0) {
       this.cancelAttentionNotice();
+      KeepAlive.clearCapsulePulse();
+    } else {
+      KeepAlive.pulseCapsule([
+        '需要确认 · ' + this.pendingInteractions.size,
+        this.currentSessionTitle.length > 0 ? this.currentSessionTitle : 'DSH 远程'
+      ], '#F5B93F', 0);
     }
   }
 
@@ -5660,6 +5671,7 @@ export class AppRuntime {
       this.turnStartedAt = Date.now();
       this.turnSteps = 0;
       this.lastTurnSummary = '';
+      KeepAlive.clearCapsulePulse();
     } else if (event.type === 'turn/end') {
       this.generating = false;
       const elapsed: number = this.turnStartedAt > 0 ? Date.now() - this.turnStartedAt : 0;
@@ -5669,6 +5681,11 @@ export class AppRuntime {
         + (usage.length > 0 ? ' · ' + usage : '');
       this.turnStartedAt = 0;
       this.petDoneAt = Date.now();
+      // 实况窗插播一条「完成」：手机锁屏/后台时胶囊直接亮绿，12 秒后回到常规轮播
+      KeepAlive.pulseCapsule([
+        '完成 · ' + (elapsed > 0 ? AppRuntime.durationText(elapsed) : '刚刚'),
+        this.currentSessionTitle.length > 0 ? this.currentSessionTitle : 'DSH 远程'
+      ], '#34D399', 12000);
       // 一轮结束后刷新上下文占用（不阻塞 UI）。
       this.refreshProjections().catch(() => undefined);
       // 后台时给一条完成提醒；前台不打扰

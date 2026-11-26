@@ -319,6 +319,8 @@ struct Index {
   @State petDragX: number = 0;
   @State petDragY: number = 0;
   @State petDragging: boolean = false;
+  /** 长按后先膨胀到 2 倍，再跟手指走；松手回原位并缩回。 */
+  @State petDragScale: number = 1;
   @State gitLoading: boolean = false;
   @State gitError: string = '';
   @State gitBranch: string = '';
@@ -1837,6 +1839,9 @@ struct Index {
               .onAction(() => {
                 this.petDragging = true;
                 this.tapHaptic();
+                animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
+                  this.petDragScale = 2;
+                });
               }),
             PanGesture({ fingers: 1, distance: 4 })
               .onActionUpdate((event: GestureEvent) => {
@@ -1854,6 +1859,7 @@ struct Index {
                 animateTo({ duration: 340, curve: Curve.Friction }, () => {
                   this.petDragX = 0;
                   this.petDragY = 0;
+                  this.petDragScale = 1;
                 });
               })
               .onActionCancel(() => {
@@ -1864,6 +1870,7 @@ struct Index {
                 animateTo({ duration: 340, curve: Curve.Friction }, () => {
                   this.petDragX = 0;
                   this.petDragY = 0;
+                  this.petDragScale = 1;
                 });
               })
           )
@@ -1875,7 +1882,7 @@ struct Index {
     .margin({ right: 14 })
     .offset({ x: this.petDragX, y: -(this.dockHeight + 10) + this.petDragY })
     // 拖动时轻微放大 + 提高层级，松手回弹由 animateTo 负责
-    .scale(this.petDragging ? { x: 1.08, y: 1.08 } : { x: 1, y: 1 })
+    .scale({ x: this.petDragScale, y: this.petDragScale })
     .animation({ duration: 160, curve: Curve.EaseOut })
     .zIndex(this.petDragging ? 80 : 0)
     .hitTestBehavior(HitTestMode.Transparent)
@@ -6274,6 +6281,7 @@ struct Index {
           })
           }
           // 输入框自己就是一块玻璃；换行靠回车，高度随内容长到 5 行再内部滚动
+          Stack() {
           TextArea({ text: this.promptInput,
             placeholder: this.generating
               ? (this.compactDock() ? this.tr('正在生成…') : this.tr('正在生成，可插话…'))
@@ -6281,7 +6289,7 @@ struct Index {
                 ? (this.compactDock() ? this.tr('插话发送…') : this.tr('插话发送（长按发送键切换）'))
                 : (this.isWideLayout() ? this.tr('发送消息…（Enter 换行 · Ctrl+Enter 发送）')
                   : this.tr('发送消息…'))) })
-            .layoutWeight(1)
+            .width('100%')
             .constraintSize({ minHeight: this.compactDock() ? 44 : 46,
               maxHeight: this.isLandscape ? 160 : (this.isWideLayout() ? 240 : 132) })
             // PC 键盘约定：Enter 换行，Ctrl+Enter（或 ⌘+Enter）发送，Shift+Enter 也按换行。
@@ -6362,6 +6370,11 @@ struct Index {
             .onMouse((event: MouseEvent) => {
               this.trackDockMouse(event);
             })
+            this.InputGlow()
+          }
+          .layoutWeight(1)
+          .constraintSize({ minHeight: this.compactDock() ? 44 : 46,
+            maxHeight: this.isLandscape ? 160 : (this.isWideLayout() ? 240 : 132) })
           if (this.generating && !this.compactDock()) {
             Text('■')
               .fontSize(this.fs(16))
@@ -11005,7 +11018,7 @@ struct Index {
           ['rgba(255,255,255,0)', 1]
         ]
       })
-      .opacity(this.inputFocused ? 1 : 0.5)
+      .opacity(this.inputFocused ? 1 : 0.72)
       .animation({ duration: 220, curve: Curve.EaseOut })
       .hitTestBehavior(HitTestMode.None)
   }

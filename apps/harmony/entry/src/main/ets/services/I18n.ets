@@ -445,6 +445,9 @@ function buildEnglish(): Map<string, string> {
   map.set('加载中…', 'Loading…');
   map.set('加载更早的消息', 'Load earlier messages');
   map.set('在相机界面切到附近设备', 'Switch to the nearby device inside the camera');
+  map.set('图片加入待发送', 'Add image to draft');
+  map.set('图片已加入待发送', 'Image added to the draft');
+  map.set('这张图读不出来', 'This image cannot be read');
   map.set('长按图片键 · 从其他设备取图', 'Long-press the image key to grab a photo from another device');
   map.set('从其他设备获取', 'Get from another device');
   map.set('拍照 / 扫描 / 相册', 'Photo / scan / gallery');

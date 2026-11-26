@@ -26,7 +26,8 @@ import {
   Breakpoint, FoldState, breakpointOf, contentColumnWidth, deviceColumns, foldStateOf,
   isCompactWidth, isExpandedWidth, mascotVisible
 } from '../services/Adaptive';
-import { PickedImage, captureImage, compressPixelMap, pickImages } from '../services/ImagePicker';
+import { PickedImage, captureImage, compressPixelMap, pickImages, pickedImageFromBase64 }
+  from '../services/ImagePicker';
 import { CrossDevice } from '../services/CrossDevice';
 import { CrossDeviceCapture } from '../services/CrossDeviceCapture';
 import { CollaborationServiceFilter, createCollaborationServiceMenuItems, CollaborationServiceStateDialog }
@@ -232,6 +233,8 @@ struct Index {
   @State messageActionText: string = '';
   @State messageActionKind: string = '';
   @State messageActionSeq: number = 0;
+  /** 被长按那条消息自带的图片（base64），可直接拿来当待发送。 */
+  @State messageActionImages: string[] = [];
   @State messageActionTime: number = 0;
   /** 该消息里所有代码块拼起来的内容，空串表示没有代码。 */
   @State messageActionCode: string = '';
@@ -1253,36 +1256,38 @@ struct Index {
           this.capturePhoto();
         })
         // 跨设备取图：走系统的「服务协同」（WPS 那条链路）。
-        // 请求方发起后由**对端系统**的相机/图库出图再回传，两端都保留这个入口；
-        // 同时图片键长按也能直接弹这个菜单（浮层里点不开时还有一条路）。
-        Button() {
-          Row({ space: 10 }) {
-            Text(this.tr('从其他设备获取'))
-              .fontSize(14)
-              .fontColor(this.pal().text)
-            Blank()
-            Text(this.collabMsg.length > 0
-              ? this.collabMsg
-              : (this.nearbyDevices.length > 0
-                ? this.nearbyDevices.join('、')
-                : this.tr('拍照 / 扫描 / 相册')))
-              .fontSize(11)
-              .fontColor(this.collabMsg.length > 0 ? '#22D3EE' : this.pal().text3)
-              .maxLines(1)
-              .constraintSize({ maxWidth: 200 })
-              .textOverflow({ overflow: TextOverflow.Ellipsis })
-            Text('›')
-              .fontSize(15)
-              .fontColor(this.pal().text3)
+        // 手机上系统菜单弹不出来（只闪一个白点），所以只在 PC/平板上显示这一项；
+        // 手机要从 PC 拿图，走「PC 把图发到会话 → 手机长按那张图 → 图片加入待发送」。
+        if (!isPhoneDevice()) {
+          Button() {
+            Row({ space: 10 }) {
+              Text(this.tr('从其他设备获取'))
+                .fontSize(14)
+                .fontColor(this.pal().text)
+              Blank()
+              Text(this.collabMsg.length > 0
+                ? this.collabMsg
+                : (this.nearbyDevices.length > 0
+                  ? this.nearbyDevices.join('、')
+                  : this.tr('拍照 / 扫描 / 相册')))
+                .fontSize(11)
+                .fontColor(this.collabMsg.length > 0 ? '#22D3EE' : this.pal().text3)
+                .maxLines(1)
+                .constraintSize({ maxWidth: 200 })
+                .textOverflow({ overflow: TextOverflow.Ellipsis })
+              Text('›')
+                .fontSize(15)
+                .fontColor(this.pal().text3)
+            }
+            .width('100%')
           }
           .width('100%')
+          .padding({ top: 13, bottom: 13, left: 14, right: 14 })
+          .backgroundColor(this.pal().card)
+          .borderRadius(12)
+          .border({ width: 1, color: this.pal().border })
+          .bindMenu(this.CollabMenu)
         }
-        .width('100%')
-        .padding({ top: 13, bottom: 13, left: 14, right: 14 })
-        .backgroundColor(this.pal().card)
-        .borderRadius(12)
-        .border({ width: 1, color: this.pal().border })
-        .bindMenu(this.CollabMenu)
         Text(this.tr('取消'))
           .fontSize(14)
           .fontColor(this.pal().text2)
@@ -9077,6 +9082,7 @@ struct Index {
     this.messageActionSeq = item.seq;
     this.messageActionTime = item.timestamp;
     this.messageActionCode = extractCodeBlocks(item.text);
+    this.messageActionImages = item.images.slice();
     this.messageActionsOpen = true;
   }
 
@@ -9335,6 +9341,31 @@ struct Index {
               promptAction.showToast({ message: this.tr('已复制代码') });
             }).catch(() => undefined);
             this.messageActionsOpen = false;
+          })
+        }
+        if (this.messageActionImages.length > 0) {
+          this.MessageActionRow('🖼', this.tr('图片加入待发送'), false, () => {
+            const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+            const bodies: string[] = this.messageActionImages.slice();
+            this.messageActionsOpen = false;
+            const tasks: Promise<PickedImage | undefined>[] = [];
+            for (const body of bodies) {
+              tasks.push(pickedImageFromBase64(body, context.filesDir));
+            }
+            Promise.all(tasks).then((list: Array<PickedImage | undefined>) => {
+              const accepted: PickedImage[] = [];
+              for (const one of list) {
+                if (one !== undefined) {
+                  accepted.push(one);
+                }
+              }
+              if (accepted.length === 0) {
+                promptAction.showToast({ message: this.tr('这张图读不出来') });
+                return;
+              }
+              this.pendingImages = this.pendingImages.concat(accepted);
+              promptAction.showToast({ message: this.tr('图片已加入待发送') });
+            }).catch(() => undefined);
           })
         }
         this.MessageActionRow('❝', this.tr('引用到输入框'), false, () => {

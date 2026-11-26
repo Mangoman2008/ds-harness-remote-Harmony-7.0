@@ -48,6 +48,31 @@ export async function pickImages(maxCount: number): Promise<PickedImage[]> {
   return out;
 }
 
+/** 从一段 base64 还原成待发送图片（会话里已有的图直接复用，不用再选一次）。 */
+export async function pickedImageFromBase64(base64: string, dir: string): Promise<PickedImage | undefined> {
+  try {
+    const bytes: Uint8Array = new util.Base64Helper().decodeSync(base64);
+    const path: string = dir + '/reuse-' + Date.now() + '-' + Math.round(Math.random() * 1000) + '.img';
+    const file = fs.openSync(path,
+      fs.OpenMode.READ_WRITE | fs.OpenMode.CREATE | fs.OpenMode.TRUNC);
+    try {
+      fs.writeSync(file.fd, bytes.buffer as ArrayBuffer);
+    } finally {
+      fs.closeSync(file);
+    }
+    const picked: PickedImage = await loadAndCompress(path);
+    try {
+      fs.unlinkSync(path);
+    } catch (error) {
+      // 删不掉也无妨
+    }
+    return picked;
+  } catch (error) {
+    logWarn('reuse image failed');
+    return undefined;
+  }
+}
+
 /** 从沙箱文件读一张图（跨设备回传的字节先落盘，再走同一套压缩）。 */
 export async function pickedImageFromFile(path: string): Promise<PickedImage> {
   return await loadAndCompress(path);

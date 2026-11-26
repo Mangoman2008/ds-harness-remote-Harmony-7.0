@@ -65,5 +65,7 @@
 - 再修插队/撤回的参数形状：网关要求 `session/updateQueue` 的参数包在 `request` 里，
   平铺 `sessionId/itemId/action` 会被判「args fields do not match the descriptor」。
 - 修同一条消息里的图片显示两份：本机预览与主机回显的附件 id 指向同一张图，改成「有本地预览就不再补水」。
+- 修带图片/文件的气泡里看不到「排队中 · 插队 · 撤回」：状态行原来与气泡横向并排，气泡一变宽就被挤出屏幕；
+  改成气泡在上、状态与时间在下（纵向排列、右对齐）。
 
 贡献者：[Mangoman2008](https://github.com/Mangoman2008)。

@@ -7660,9 +7660,8 @@ struct Index {
   MessageRow(item: ChatItem) {
     if (item.kind === 'user') {
       Row() {
-        // A definite-width inner row gives the bubble a hard wrap budget, so long
-        // text lines break inside the gradient instead of overflowing it.
-        Row() {
+        // 纵向容器：气泡在上，排队状态和时间在下（横向排时状态会被宽气泡挤出屏幕）
+        Column({ space: 4 }) {
           Column({ space: 6 }) {
             if (this.messageImages(item).length > 0) {
               Column({ space: 6 }) {
@@ -7788,13 +7787,11 @@ struct Index {
             Text(formatClock(item.timestamp))
               .fontSize(this.fs(10))
               .fontColor(this.pal().text3)
-              .width('80%')
-              .textAlign(TextAlign.End)
               .padding({ top: 2 })
           }
         }
         .width('80%')
-        .justifyContent(FlexAlign.End)
+        .alignItems(HorizontalAlign.End)
         .gesture(LongPressGesture().onAction(() => {
           this.offerMessageActions(item);
         }))

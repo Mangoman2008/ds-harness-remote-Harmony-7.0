@@ -6310,9 +6310,6 @@ struct Index {
             .border({ width: 1,
               color: this.isDarkUi ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.95)' })
             .padding({ left: 18, right: 18, top: 12, bottom: 12 })
-            // 输入框的光感：聚焦时整条泛起一层柔光（TextArea 自己吃触摸事件，
-            // 按坐标跟踪的光斑在它上面收不到 Down，所以改成聚焦驱动）
-            .overlay(this.InputGlow(), { align: Alignment.Center })
             .onFocus(() => {
               this.inputFocused = true;
             })
@@ -6322,6 +6319,8 @@ struct Index {
             .clip(true)
             // 生成中保持可输入：否则「插话」无从谈起。
             .enabled(true)
+            // 光斑放最后画：否则会被 TextArea 自己的玻璃底盖住（这次是真看不见的原因）
+            .overlay(this.InputGlow(), { align: Alignment.Center })
             .onFocus(() => {
               if (this.stickToBottom) {
                 setTimeout(() => {
@@ -11001,7 +11000,7 @@ struct Index {
           ['rgba(255,255,255,0)', 1]
         ]
       })
-      .opacity(this.inputFocused ? 1 : 0)
+      .opacity(this.inputFocused ? 1 : 0.5)
       .animation({ duration: 220, curve: Curve.EaseOut })
       .hitTestBehavior(HitTestMode.None)
   }

@@ -208,6 +208,8 @@ struct Index {
   @State filePreviewOpen: boolean = false;
   /** 预览的是不是 PDF（走系统 PDF Kit 渲染）。 */
   @State previewIsPdf: boolean = false;
+  /** PDF 全屏连续阅读（0.6.8 对齐）：预览面板铺满整屏。 */
+  @State pdfFullscreen: boolean = false;
   @State pdfError: string = '';
   private pdfController: pdfViewManager.PdfController = new pdfViewManager.PdfController();
   /** 消息操作面板（自绘，替代系统 ActionSheet）。 */
@@ -8785,6 +8787,17 @@ struct Index {
           }
           .layoutWeight(1)
           .alignItems(HorizontalAlign.Start)
+          if (this.previewIsPdf && this.pdfError.length === 0) {
+            Text(this.pdfFullscreen ? this.tr('还原') : this.tr('全屏'))
+              .fontSize(this.fs(12))
+              .fontColor('#22D3EE')
+              .padding({ left: 10, right: 10, top: 6, bottom: 6 })
+              .backgroundColor('rgba(34,211,238,0.10)')
+              .borderRadius(9)
+              .onClick(() => {
+                this.pdfFullscreen = !this.pdfFullscreen;
+              })
+          }
           Text('关闭')
             .fontSize(this.fs(12))
             .fontColor(this.pal().text3)
@@ -8817,8 +8830,10 @@ struct Index {
             pageFit: pdfService.PageFit.FIT_WIDTH
           })
             .width('100%')
-            .height(this.windowHeightVp > 0 ? this.windowHeightVp * 0.62 : 420)
-            .borderRadius(12)
+            .height(this.pdfFullscreen
+              ? '100%'
+              : (this.windowHeightVp > 0 ? this.windowHeightVp * 0.62 : 420))
+            .borderRadius(this.pdfFullscreen ? 0 : 12)
         } else if (this.previewIsPdf && this.pdfError.length > 0) {
           Text(this.tr('PDF 打开失败：') + this.pdfError)
             .fontSize(this.fs(12))

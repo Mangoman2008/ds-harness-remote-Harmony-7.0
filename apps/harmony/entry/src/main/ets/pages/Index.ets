@@ -319,8 +319,8 @@ struct Index {
   @State petDragX: number = 0;
   @State petDragY: number = 0;
   @State petDragging: boolean = false;
-  /** 长按后先膨胀到 2 倍，再跟手指走；松手回原位并缩回。 */
-  @State petDragScale: number = 1;
+  /** 长按已授权拖动（松手后清掉，下一轮要重新长按）。 */
+  @State petArmed: boolean = false;
   @State gitLoading: boolean = false;
   @State gitError: string = '';
   @State gitBranch: string = '';
@@ -1832,49 +1832,47 @@ struct Index {
         .onClick(() => {
           this.onPetTap();
         })
-        // 长按进入拖动：整个浮层可拖到屏幕任意位置，松手弹回原位
-        .gesture(
-          GestureGroup(GestureMode.Sequence,
-            LongPressGesture({ repeat: false, duration: 350 })
-              .onAction(() => {
-                this.petDragging = true;
-                this.tapHaptic();
-                animateTo({ duration: 220, curve: Curve.EaseOut }, () => {
-                  this.petDragScale = 2;
-                });
-              }),
-            PanGesture({ fingers: 1, distance: 4 })
-              .onActionUpdate((event: GestureEvent) => {
-                if (!this.petDragging) {
-                  return;
-                }
-                this.petDragX = event.offsetX;
-                this.petDragY = event.offsetY;
-              })
-              .onActionEnd(() => {
-                if (!this.petDragging) {
-                  return;
-                }
-                this.petDragging = false;
-                animateTo({ duration: 340, curve: Curve.Friction }, () => {
-                  this.petDragX = 0;
-                  this.petDragY = 0;
-                  this.petDragScale = 1;
-                });
-              })
-              .onActionCancel(() => {
-                if (!this.petDragging) {
-                  return;
-                }
-                this.petDragging = false;
-                animateTo({ duration: 340, curve: Curve.Friction }, () => {
-                  this.petDragX = 0;
-                  this.petDragY = 0;
-                  this.petDragScale = 1;
-                });
-              })
-          )
-        )
+        // 长按 350ms 授权拖动；授权后跟手指走，松手弹回原位并放开授权。
+        // 用 parallelGesture 而不是 Sequence：Sequence 一旦结束就再也不会重新开始，
+        // 这就是「拖过一次以后再也拖不动」的原因。
+        .gesture(GestureGroup(GestureMode.Parallel,
+          LongPressGesture({ repeat: false, duration: 350 })
+            .onAction(() => {
+              this.petArmed = true;
+              this.petDragging = true;
+              this.tapHaptic();
+            }),
+          PanGesture({ fingers: 1, distance: 2 })
+            .onActionUpdate((event: GestureEvent) => {
+              if (!this.petArmed) {
+                return;
+              }
+              this.petDragX = event.offsetX;
+              this.petDragY = event.offsetY;
+            })
+            .onActionEnd(() => {
+              if (!this.petArmed) {
+                return;
+              }
+              this.petArmed = false;
+              this.petDragging = false;
+              animateTo({ duration: 340, curve: Curve.Friction }, () => {
+                this.petDragX = 0;
+                this.petDragY = 0;
+              });
+            })
+            .onActionCancel(() => {
+              if (!this.petArmed) {
+                return;
+              }
+              this.petArmed = false;
+              this.petDragging = false;
+              animateTo({ duration: 340, curve: Curve.Friction }, () => {
+                this.petDragX = 0;
+                this.petDragY = 0;
+              });
+            })
+        ))
       }
       .alignItems(HorizontalAlign.End)
     }
@@ -1882,7 +1880,7 @@ struct Index {
     .margin({ right: 14 })
     .offset({ x: this.petDragX, y: -(this.dockHeight + 10) + this.petDragY })
     // 拖动时轻微放大 + 提高层级，松手回弹由 animateTo 负责
-    .scale({ x: this.petDragScale, y: this.petDragScale })
+    .scale(this.petDragging ? { x: 1.06, y: 1.06 } : { x: 1, y: 1 })
     .animation({ duration: 160, curve: Curve.EaseOut })
     .zIndex(this.petDragging ? 80 : 0)
     .hitTestBehavior(HitTestMode.Transparent)
@@ -6370,7 +6368,6 @@ struct Index {
             .onMouse((event: MouseEvent) => {
               this.trackDockMouse(event);
             })
-            this.InputGlow()
           }
           .layoutWeight(1)
           .constraintSize({ minHeight: this.compactDock() ? 44 : 46,

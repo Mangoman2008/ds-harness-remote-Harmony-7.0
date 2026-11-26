@@ -27,6 +27,7 @@ import {
   isCompactWidth, isExpandedWidth, mascotVisible
 } from '../services/Adaptive';
 import { PickedImage, captureImage, compressPixelMap, pickImages } from '../services/ImagePicker';
+import { CrossDevice } from '../services/CrossDevice';
 import { MAX_FILE_BYTES, PickedFile, pickFiles } from '../services/FilePicker';
 import { SavedProfile } from '../services/SecureStore';
 import { PromptFilePart, PromptImagePart } from '../net/HarnessClient';
@@ -397,6 +398,10 @@ struct Index {
   private terminalPending: string[] = [];
   private terminalController: webview.WebviewController = new webview.WebviewController();
   /** 应用内 Web 控制台：直接开宿主机上的 dsh web（网页版），地址填一次记住。 */
+  /** 图片键的小菜单：相册 / 拍照（挤在一起就别再加按钮了）。 */
+  @State imageMenuOpen: boolean = false;
+  /** 附近在线设备名：有才显示「用附近设备拍照」那一行。 */
+  @State nearbyDevices: string[] = [];
   @State webConsoleOpen: boolean = false;
   @State webConsoleSrc: string = '';
   @State webConsoleInput: string = '';
@@ -500,6 +505,10 @@ struct Index {
    * 返回 true 表示已处理，不会退出应用。
    */
   onBackPress(): boolean {
+    if (this.imageMenuOpen) {
+      this.imageMenuOpen = false;
+      return true;
+    }
     if (this.previewActive) {
       this.previewActive = false;
       return true;
@@ -1128,7 +1137,97 @@ struct Index {
     });
   }
 
-  /** 拍照（系统相机；2in1 上由系统决定是否借用附近手机的摄像头）。 */
+  /**
+   * 图片键点一下先问「相册 / 拍照」，不占第二个按钮的位置。
+   * 拍照走系统相机：有摄像头的设备（包括 PC）直接拍，2in1 上系统还可以借附近手机的摄像头。
+   */
+  private chooseImageSource(): void {
+    if (this.pickingImages) {
+      return;
+    }
+    this.imageMenuOpen = true;
+    this.refreshNearbyDevices();
+  }
+
+  /** 查一次附近设备（首次会弹权限）；拿不到就悄悄不显示那一行。 */
+  private refreshNearbyDevices(): void {
+    const context: common.UIAbilityContext = getContext(this) as common.UIAbilityContext;
+    CrossDevice.nearbyNames(context).then((names: string[]) => {
+      this.nearbyDevices = names;
+    }).catch(() => {
+      this.nearbyDevices = [];
+    });
+  }
+
+  /** 图片键弹出的小菜单（自绘，和别的弹层同一套磨砂）。 */
+  @Builder
+  ImageSourceSheet() {
+    Stack({ alignContent: Alignment.Bottom }) {
+      Column()
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.dialogScrim())
+        .onClick(() => {
+          this.imageMenuOpen = false;
+        })
+      Column({ space: 8 }) {
+        Text(this.tr('添加图片'))
+          .fontSize(this.fs(12))
+          .fontColor(this.pal().text3)
+          .width('100%')
+          .padding({ left: 4, bottom: 2 })
+        this.SettingsRow(this.tr('从相册选'), '', false, () => {
+          this.imageMenuOpen = false;
+          this.attachImage();
+        })
+        this.SettingsRow(this.tr('拍照'), this.pcHasCameraHint(), false, () => {
+          this.imageMenuOpen = false;
+          this.capturePhoto();
+        })
+        // 「跨设备拍照」是系统相机在 2in1/平板上的能力（借用附近手机的摄像头）。
+        // 手机端的系统相机只列本机摄像头，所以手机上这一行没有意义，不显示。
+        if (!isPhoneDevice() && this.nearbyDevices.length > 0) {
+          this.SettingsRow(this.tr('用附近设备拍照'), this.nearbyDevices.join('、'), false, () => {
+            this.imageMenuOpen = false;
+            promptAction.showToast({ message: this.tr('在相机界面切到附近设备') });
+            this.capturePhoto();
+          })
+        }
+        Text(this.tr('取消'))
+          .fontSize(14)
+          .fontColor(this.pal().text2)
+          .width('100%')
+          .textAlign(TextAlign.Center)
+          .padding({ top: 13, bottom: 13 })
+          .backgroundColor(this.pal().card)
+          .borderRadius(12)
+          .border({ width: 1, color: this.pal().border })
+          .onClick(() => {
+            this.imageMenuOpen = false;
+          })
+      }
+      .width('100%')
+      .constraintSize({ maxWidth: 520 })
+      .padding({ left: 16, right: 16, top: 14, bottom: 18 })
+      .backgroundColor(this.overlayGlass())
+      .backgroundBlurStyle(BlurStyle.COMPONENT_THICK, {
+        colorMode: this.isDarkUi ? ThemeColorMode.DARK : ThemeColorMode.LIGHT,
+        adaptiveColor: AdaptiveColor.DEFAULT,
+        blurOptions: { grayscale: [0, 12] }
+      })
+      .borderRadius({ topLeft: 20, topRight: 20, bottomLeft: 0, bottomRight: 0 })
+      .border({ width: 1, color: this.pal().border })
+    }
+    .width('100%')
+    .height('100%')
+  }
+
+  /** 拍照那行的小字：PC 有自己的摄像头就用本机，否则系统会找附近设备。 */
+  private pcHasCameraHint(): string {
+    return isPhoneDevice() ? this.tr('系统相机') : this.tr('本机摄像头 · 也可用附近设备');
+  }
+
+  /** 拍照（系统相机；有摄像头的设备直接拍，2in1 上由系统决定是否借用附近手机的摄像头）。 */
   private capturePhoto(): Promise<void> {
     if (this.pickingImages) {
       return Promise.resolve();
@@ -2805,6 +2904,9 @@ struct Index {
       }
       if (this.terminalOpen) {
         this.TerminalOverlay()
+      }
+      if (this.imageMenuOpen) {
+        this.ImageSourceSheet()
       }
       if (this.webConsoleOpen) {
         this.WebConsoleOverlay()
@@ -6330,24 +6432,7 @@ struct Index {
             this.trackDockLight(event);
           })
           .onClick(() => {
-            this.attachImage();
-          })
-          // 拍照键：走系统相机（鸿蒙 2in1 上可以借附近手机的摄像头，也就是「跨设备拍照」）
-          Row() {
-            Image($r('app.media.ic_camera'))
-              .width(this.fs(18))
-              .height(this.fs(18))
-              .fillColor(this.pal().text2)
-              .objectFit(ImageFit.Contain)
-          }
-          .width(this.compactDock() ? 30 : 34)
-          .height(this.compactDock() ? 40 : 46)
-          .justifyContent(FlexAlign.Center)
-          .alignItems(VerticalAlign.Center)
-          .borderRadius(this.compactDock() ? 20 : 23)
-          .backgroundColor(this.isDarkUi ? 'rgba(255,255,255,0.10)' : 'rgba(255,255,255,0.40)')
-          .onClick(() => {
-            this.capturePhoto();
+            this.chooseImageSource();
           })
           // 文件键：和图片键同规格，左边再挂一枚
           Row() {

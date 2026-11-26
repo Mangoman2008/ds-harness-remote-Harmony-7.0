@@ -2,8 +2,8 @@
   "app": {
     "bundleName": "cn.r2049.dshremote",
     "vendor": "r2049",
-    "versionCode": 1000365,
-    "versionName": "0.17.243-lan",
+    "versionCode": 1000369,
+    "versionName": "0.17.247-lan",
     "icon": "$media:layered_image",
     "label": "$string:app_name"
   }

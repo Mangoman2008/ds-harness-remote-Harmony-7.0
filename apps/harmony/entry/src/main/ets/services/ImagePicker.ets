@@ -55,9 +55,12 @@ export async function pickImages(maxCount: number): Promise<PickedImage[]> {
  * 用户取消返回 undefined。
  */
 export async function captureImage(context: common.Context): Promise<PickedImage | undefined> {
-  const profile: cameraPicker.PickerProfile = new cameraPicker.PickerProfile();
-  profile.cameraPosition = camera.CameraPosition.CAMERA_POSITION_BACK;
-  profile.saveUri = context.filesDir + '/capture-' + Date.now() + '.jpg';
+  // PickerProfile 是系统侧的对象：属性在运行期是只读的，`new` 完再赋值会报
+  // 「Cannot assign to read only property」，必须在字面量里一次性给出。
+  const profile: cameraPicker.PickerProfile = {
+    cameraPosition: camera.CameraPosition.CAMERA_POSITION_BACK,
+    saveUri: context.filesDir + '/capture-' + Date.now() + '.jpg'
+  };
   const result: cameraPicker.PickerResult =
     await cameraPicker.pick(context, [cameraPicker.PickerMediaType.PHOTO], profile);
   if (result.resultCode !== 0 || result.resultUri === undefined || result.resultUri.length === 0) {

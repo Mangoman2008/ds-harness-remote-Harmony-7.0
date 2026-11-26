@@ -444,6 +444,13 @@ function buildEnglish(): Map<string, string> {
   map.set('列表密度', 'List density');
   map.set('加载中…', 'Loading…');
   map.set('加载更早的消息', 'Load earlier messages');
+  map.set('在相机界面切到附近设备', 'Switch to the nearby device inside the camera');
+  map.set('用附近设备拍照', 'Shoot with a nearby device');
+  map.set('系统相机', 'System camera');
+  map.set('本机摄像头 · 也可用附近设备', 'Built-in camera · or a nearby device');
+  map.set('添加图片', 'Add an image');
+  map.set('从相册选', 'Choose from gallery');
+  map.set('拍照', 'Take a photo');
   map.set('Web 控制台', 'Web console');
   map.set('打开宿主机网页版', 'Open the host web UI');
   map.set('填宿主机的局域网地址，App 里直接开网页版 DSH', 'Fill in the host LAN address to open the web DSH inside the app');

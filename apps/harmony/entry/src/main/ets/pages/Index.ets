@@ -6127,6 +6127,11 @@ struct Index {
             .border({ width: 1,
               color: this.isDarkUi ? 'rgba(255,255,255,0.22)' : 'rgba(255,255,255,0.95)' })
             .padding({ left: 18, right: 18, top: 12, bottom: 12 })
+            // 输入框自己也挂一枚光斑：之前只有两侧按键有，看着像「一半有光一半没有」
+            .overlay(this.DockSpot(96), { align: Alignment.Center })
+            .onTouch((event: TouchEvent) => {
+              this.trackDockLight(event);
+            })
             .clip(true)
             // 生成中保持可输入：否则「插话」无从谈起。
             .enabled(true)

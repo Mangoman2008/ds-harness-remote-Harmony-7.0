@@ -5291,9 +5291,11 @@ struct Index {
               .maxLines(1)
               .textOverflow({ overflow: TextOverflow.Ellipsis })
               .constraintSize({ maxWidth: 130 })
-            Text(this.tr('切换'))
-              .fontSize(this.fs(10))
-              .fontColor('#22D3EE')
+            if (!this.compactHeader()) {
+              Text(this.tr('切换'))
+                .fontSize(this.fs(10))
+                .fontColor('#22D3EE')
+            }
           }
           .padding({ left: 10, right: 10, top: 4, bottom: 4 })
           .backgroundColor(this.pal().chip)
@@ -10968,6 +10970,11 @@ struct Index {
   }
 
   /** 底部弹层的统一底色：半透明 + 背景磨砂，透出后面的会话内容。 */
+  /** 窄屏（手机竖屏）顶栏空间紧：隐藏「切换」二字，只留主机名与箭头。 */
+  private compactHeader(): boolean {
+    return this.windowWidthVp > 0 && this.windowWidthVp < 520;
+  }
+
   private overlayGlass(): string {
     // 透一点才看得出是磨砂：弹层背后的会话内容要能隐约透出来
     return this.isDarkUi ? 'rgba(24,30,46,0.52)' : 'rgba(250,252,255,0.62)';
@@ -10985,11 +10992,12 @@ struct Index {
       .width('100%')
       .height('100%')
       .radialGradient({
-        center: ['50%', '50%'],
-        radius: 150,
+        center: ['50%', '42%'],
+        radius: 220,
         colors: [
-          ['rgba(255,255,255,0.20)', 0],
-          ['rgba(255,255,255,0.10)', 0.55],
+          ['rgba(255,255,255,0.58)', 0],
+          ['rgba(255,255,255,0.26)', 0.45],
+          ['rgba(255,255,255,0.08)', 0.75],
           ['rgba(255,255,255,0)', 1]
         ]
       })
